@@ -195,7 +195,7 @@ const httpServer = createServer(app);
 const io = new Server(httpServer, {
   cors: {
     origin: [
-      process.env.WEB_URL || 'http://localhost:3000',
+      process.env.FRONTEND_URL || process.env.WEB_URL || 'http://localhost:3000',
       process.env.MOBILE_URL || 'exp://localhost:19000',
       'http://localhost:8081'
     ],
@@ -242,7 +242,7 @@ app.use((req, res, next) => {
 })); */
 app.use(cors({
   origin: [
-    process.env.WEB_URL || 'http://localhost:3000',
+    process.env.FRONTEND_URL || process.env.WEB_URL || 'http://localhost:3000',
     process.env.MOBILE_URL || 'exp://localhost:19000',
     'http://localhost:8081'
   ],
