@@ -256,7 +256,7 @@ app.use(cors({
 // Rate limiting - Désactivé en développement
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: process.env.NODE_ENV === 'production' ? 100 : 10000, // 100 en prod, 10000 en dev
+  max: process.env.NODE_ENV === 'production' ? 1000 : 10000, // 1000 en prod, 10000 en dev
   message: {
     success: false,
     message: 'Trop de requêtes, veuillez réessayer plus tard.'
@@ -268,7 +268,7 @@ app.use('/api/', limiter);
 // Auth endpoints have stricter rate limiting (disabled in development)
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: process.env.NODE_ENV === 'production' ? 10 : 1000, // 10 en prod, 1000 en dev
+  max: process.env.NODE_ENV === 'production' ? 100 : 1000, // 100 en prod, 1000 en dev
   message: {
     success: false,
     message: 'Trop de tentatives de connexion, veuillez réessayer plus tard.'
