@@ -272,6 +272,32 @@ class SyncService {
 
   // Stats
   onStatsUpdated(callback) { return this.on('stats:updated', callback); }
+
+  /**
+   * Envoyer la position GPS en temps réel
+   */
+  sendPosition(positionData) {
+    if (!this.socket || !this.socket.connected) {
+      console.warn('⚠️ Socket non connecté, impossible d\'envoyer la position');
+      return false;
+    }
+
+    // Ajouter batteryLevel depuis Battery API si disponible
+    if (navigator.getBattery) {
+      navigator.getBattery().then(battery => {
+        const dataWithBattery = {
+          ...positionData,
+          batteryLevel: Math.round(battery.level * 100)
+        };
+        this.socket.emit('tracking:position', dataWithBattery);
+      });
+    } else {
+      // Pas d'API Battery, envoyer sans
+      this.socket.emit('tracking:position', positionData);
+    }
+    
+    return true;
+  }
 }
 
 // Instance singleton

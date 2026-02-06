@@ -689,6 +689,59 @@ const CheckIn = () => {
     }
   });
 
+  // 🔥 TRACKING GPS EN TEMPS RÉEL après le check-in
+  useEffect(() => {
+    let watchId = null;
+    
+    // Démarrer le tracking seulement si l'utilisateur a pointé
+    if (todayAttendance?.checkedIn && !todayAttendance?.checkedOut && user?.id) {
+      console.log('📡 Démarrage du tracking GPS en temps réel...');
+      
+      const sendPosition = (position) => {
+        const positionData = {
+          userId: user.id,
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+          speed: position.coords.speed || 0,
+          isMoving: (position.coords.speed || 0) > 0.5,
+          timestamp: new Date(position.timestamp).toISOString()
+        };
+        
+        // Envoyer via syncService
+        const syncService = require('../services/syncService').default;
+        const sent = syncService.sendPosition(positionData);
+        
+        if (sent) {
+          console.log('📍 Position GPS envoyée:', positionData.latitude, positionData.longitude);
+        }
+      };
+      
+      // Démarrer le watch GPS
+      if (navigator.geolocation) {
+        watchId = navigator.geolocation.watchPosition(
+          sendPosition,
+          (error) => console.error('❌ Erreur GPS tracking:', error),
+          {
+            enableHighAccuracy: true,
+            timeout: 10000,
+            maximumAge: 0
+          }
+        );
+        
+        console.log('✅ GPS Watch démarré, ID:', watchId);
+      }
+    }
+    
+    // Cleanup
+    return () => {
+      if (watchId) {
+        navigator.geolocation.clearWatch(watchId);
+        console.log('🛑 GPS Watch arrêté');
+      }
+    };
+  }, [todayAttendance?.checkedIn, todayAttendance?.checkedOut, user?.id]);
+
   // Auto-sélectionner le premier événement quand la liste change (pour agents et responsables)
   useEffect(() => {
     if (todayEvents.length > 0 && !selectedEventId && (user?.role === 'agent' || user?.role === 'supervisor')) {
