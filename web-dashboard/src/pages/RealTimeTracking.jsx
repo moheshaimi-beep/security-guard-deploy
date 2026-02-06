@@ -519,8 +519,9 @@ const RealTimeTracking = () => {
         return; // Ignorer si pas affecté à cet événement
       }
       
-      // Déterminer si c'est un agent ou superviseur basé sur le rôle dans l'assignment
-      const isSupervisorRole = assignment.role === 'supervisor';
+      // Déterminer si c'est un agent ou superviseur basé sur le rôle
+      // Les superviseurs peuvent avoir role='supervisor' dans User OU dans Assignment
+      const isSupervisorRole = assignment.role === 'supervisor' || position.user?.role === 'supervisor';
       
       if (isSupervisorRole) {
         console.log('➕ Ajout/update superviseur:', position.userId);
@@ -541,7 +542,14 @@ const RealTimeTracking = () => {
             });
           }
           
-          newSupervisors.set(position.userId, position);
+          newSupervisors.set(position.userId, {
+            ...position,
+            firstName: position.user?.firstName || assignment.agent?.firstName || 'Inconnu',
+            lastName: position.user?.lastName || assignment.agent?.lastName || '',
+            cin: position.user?.cin || assignment.agent?.cin,
+            role: assignment.role,
+            batteryLevel: position.batteryLevel !== null && position.batteryLevel !== undefined ? position.batteryLevel : 100
+          });
           console.log('✅ Superviseur ajouté, nouvelle taille:', newSupervisors.size);
           console.log('📍 Position ajoutée:', position.latitude, position.longitude);
           return newSupervisors;
@@ -565,7 +573,14 @@ const RealTimeTracking = () => {
             });
           }
           
-          newAgents.set(position.userId, position);
+          newAgents.set(position.userId, {
+            ...position,
+            firstName: position.user?.firstName || assignment.agent?.firstName || 'Inconnu',
+            lastName: position.user?.lastName || assignment.agent?.lastName || '',
+            cin: position.user?.cin || assignment.agent?.cin,
+            role: assignment.role,
+            batteryLevel: position.batteryLevel !== null && position.batteryLevel !== undefined ? position.batteryLevel : 100
+          });
           console.log('✅ Agent ajouté, nouvelle taille:', newAgents.size);
           console.log('📍 Position ajoutée:', position.latitude, position.longitude);
           return newAgents;
@@ -578,12 +593,14 @@ const RealTimeTracking = () => {
 
   const updateStats = () => {
     setStats(prev => {
-      const moving = Array.from(agents.values()).filter(a => a.isMoving).length;
-      const stopped = agents.size - moving;
-      const lowBattery = Array.from(agents.values()).filter(a => a.batteryLevel && a.batteryLevel < 20).length;
+      const allPeople = [...Array.from(agents.values()), ...Array.from(supervisors.values())];
+      const moving = allPeople.filter(a => a.isMoving).length;
+      const total = agents.size + supervisors.size;
+      const stopped = total - moving;
+      const lowBattery = allPeople.filter(a => a.batteryLevel && a.batteryLevel < 20).length;
       
       return {
-        total: agents.size,
+        total,
         moving,
         stopped,
         lowBattery
@@ -1234,11 +1251,11 @@ const RealTimeTracking = () => {
                         minWidth: '200px'
                       }}>
                         <div style={{ color: 'white', fontWeight: 'bold', fontSize: '13px', marginBottom: '4px', textAlign: 'center' }}>
-                          👮 {agent.firstName} {agent.lastName}
+                          {agent.isConnected ? '🟢' : '🔴'} 👮 {agent.firstName} {agent.lastName}
                         </div>
                         <div style={{ color: 'rgba(255,255,255,0.95)', fontSize: '11px', display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
                           <span>{agent.isMoving ? '🏃 En mouvement' : '🛑 À l\'arrêt'}</span>
-                          <span>🔋 {agent.batteryLevel || 0}%</span>
+                          <span>🔋 {agent.batteryLevel !== null && agent.batteryLevel !== undefined ? agent.batteryLevel : 100}%</span>
                         </div>
                         <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: '10px', textAlign: 'center', marginTop: '4px', paddingTop: '4px', borderTop: '1px solid rgba(255,255,255,0.3)' }}>
                           🕐 Il y a {getElapsedTime(agent.timestamp)}

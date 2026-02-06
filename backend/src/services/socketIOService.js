@@ -173,15 +173,16 @@ class SocketIOService {
       
       // Créer l'objet position
       const positionData = {
-        userId: userIdentifier,
+        userId: user.id, // ✅ Utiliser l'UUID réel pour matcher avec les assignments
         latitude,
         longitude,
         accuracy,
         speed: speed || 0,
         heading: heading || null,
-        batteryLevel: batteryLevel || null,
+        batteryLevel: batteryLevel !== null && batteryLevel !== undefined ? Math.round(batteryLevel) : 100,
         timestamp: Date.now(),
         isMoving: isCurrentlyMoving,
+        isConnected: true, // ✅ Indicateur de connexion
         user: user ? {
           id: user.id,
           cin: user.cin,
@@ -193,8 +194,8 @@ class SocketIOService {
         } : null
       };
       
-      // Stocker la position
-      this.agentPositions.set(userIdentifier, positionData);
+      // Stocker la position avec l'UUID réel
+      this.agentPositions.set(user.id, positionData);
       
       // Sauvegarder en base de données
       if (connection.eventId) {

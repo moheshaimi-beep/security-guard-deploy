@@ -12,12 +12,12 @@ const io = require('socket.io-client');
 const axios = require('axios');
 
 // Configuration
-const API_URL = 'http://localhost:5000/api';
-const SOCKET_URL = 'http://localhost:5000';
+const API_URL = process.env.API_URL || 'https://security-guard-backend.onrender.com/api';
+const SOCKET_URL = process.env.SOCKET_URL || 'https://security-guard-backend.onrender.com';
 
 // Credentials pour se connecter
 const ADMIN_EMAIL = 'admin@securityguard.com';
-const ADMIN_PASSWORD = 'Admin@2024';
+const ADMIN_PASSWORD = 'Admin@123';
 
 // Coordonnées de Salé (zone de l'événement)
 const EVENT_CENTER = {
