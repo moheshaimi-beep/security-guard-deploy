@@ -1,12 +1,12 @@
 services:
-  # Frontend Static Site - AVEC --legacy-peer-deps
+  # Frontend Web Service (changed from static to web with express server)
   - type: web
     name: security-guard-frontend
-    runtime: static
+    env: node
     plan: free
     rootDir: web-dashboard
-    buildCommand: npm run build
-    staticPublishPath: build
+    buildCommand: npm install && npm run build
+    startCommand: node server.js
     envVars:
       - key: NODE_VERSION
         value: 22.22.0
