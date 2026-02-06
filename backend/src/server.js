@@ -197,15 +197,26 @@ const io = new Server(httpServer, {
     origin: [
       'https://security-guard-web.onrender.com',
       'https://security-guard-frontend.onrender.com',
+      'https://security-guard-web.vercel.app',
       process.env.FRONTEND_URL || process.env.WEB_URL || 'http://localhost:3000',
       process.env.MOBILE_URL || 'exp://localhost:19000',
-      'http://localhost:8081'
+      'http://localhost:8081',
+      /\.onrender\.com$/,
+      /\.vercel\.app$/
     ],
-    methods: ['GET', 'POST'],
-    credentials: true
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+    credentials: true,
+    allowedHeaders: ['Content-Type', 'Authorization']
   },
   path: '/socket.io/',
-  transports: ['websocket', 'polling']
+  transports: ['websocket', 'polling'],
+  allowEIO3: true,
+  pingTimeout: 60000,
+  pingInterval: 25000,
+  connectTimeout: 60000,
+  maxHttpBufferSize: 1e8,
+  allowUpgrades: true,
+  perMessageDeflate: false
 });
 
 // Make io accessible to routes and services

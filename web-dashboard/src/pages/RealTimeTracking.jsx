@@ -219,7 +219,14 @@ const RealTimeTracking = () => {
         reconnection: true,
         reconnectionDelay: 1000,
         reconnectionDelayMax: 5000,
-        reconnectionAttempts: 10
+        reconnectionAttempts: Infinity,
+        timeout: 20000,
+        autoConnect: true,
+        forceNew: false,
+        multiplex: true,
+        upgrade: true,
+        rememberUpgrade: true,
+        withCredentials: true
       });
       
       socket.on('connect', () => {
@@ -266,14 +273,44 @@ const RealTimeTracking = () => {
         positions.forEach(position => handleSocketIOMessage(position));
       });
       
-      socket.on('disconnect', () => {
-        console.log('🔴 Socket.IO Tracking déconnecté');
+      socket.on('disconnect', (reason) => {
+        console.log('🔴 Socket.IO Tracking déconnecté:', reason);
         setConnected(false);
+        if (reason === 'io server disconnect') {
+          // Server forcibly disconnected, reconnect manually
+          socket.connect();
+        }
       });
       
       socket.on('connect_error', (error) => {
         console.error('❌ Erreur connexion Socket.IO:', error.message);
         setConnected(false);
+      });
+      
+      socket.on('reconnect_attempt', (attemptNumber) => {
+        console.log(`🔄 Tentative de reconnexion Socket.IO ${attemptNumber}`);
+      });
+      
+      socket.on('reconnect', (attemptNumber) => {
+        console.log(`✅ Reconnecté Socket.IO après ${attemptNumber} tentatives`);
+        setConnected(true);
+        // Re-authenticate after reconnection
+        if (user) {
+          socket.emit('auth', {
+            userId: user.id,
+            role: user.role,
+            eventId: selectedEvent?.id
+          });
+        }
+      });
+      
+      socket.on('reconnect_error', (error) => {
+        console.error('❌ Erreur de reconnexion Socket.IO:', error.message);
+      });
+      
+      socket.on('reconnect_failed', () => {
+        console.error('❌ Échec de la reconnexion Socket.IO après toutes les tentatives');
+        toast.error('Impossible de se connecter au serveur temps réel');
       });
       
       socketRef.current = socket;
@@ -692,11 +729,28 @@ const RealTimeTracking = () => {
               </select>
             </div>
             
-            <div className={`px-3 py-2 rounded-lg ${connected ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-              <div className="flex items-center gap-2">
-                <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'} ${connected ? 'animate-pulse' : ''}`}></div>
-                <span className="text-sm font-medium">{connected ? 'Connecté' : 'Déconnecté'}</span>
+            <div className="flex items-center gap-2">
+              <div className={`px-3 py-2 rounded-lg ${connected ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'} ${connected ? 'animate-pulse' : ''}`}></div>
+                  <span className="text-sm font-medium">{connected ? '🟢 Temps réel actif' : '🔴 Temps réel inactif'}</span>
+                </div>
               </div>
+              {!connected && (
+                <button
+                  onClick={() => {
+                    console.log('🔄 Reconnexion manuelle demandée');
+                    if (socketRef.current) {
+                      socketRef.current.disconnect();
+                      socketRef.current = null;
+                    }
+                    connectSocketIO();
+                  }}
+                  className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
+                >
+                  🔄 Reconnecter
+                </button>
+              )}
             </div>
           </div>
         </div>
