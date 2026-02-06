@@ -111,6 +111,7 @@ const RealTimeTracking = () => {
   const [events, setEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [assignments, setAssignments] = useState([]);
+  const assignmentsRef = useRef([]); // 🔥 Ref pour éviter les closures stale
   const [supervisorsWithAgents, setSupervisorsWithAgents] = useState([]);
   const [agents, setAgents] = useState(new Map());
   const [stats, setStats] = useState({
@@ -377,6 +378,7 @@ const RealTimeTracking = () => {
       })));
       
       setAssignments(assignmentsList);
+      assignmentsRef.current = assignmentsList; // 🔥 Mettre à jour la ref aussi
       
       // Regrouper par superviseur - EXCLURE les superviseurs de la liste des agents
       const grouped = {};
@@ -452,8 +454,11 @@ const RealTimeTracking = () => {
   const updatePersonPosition = (position, animate = true) => {
     console.log('📍 updatePersonPosition appelée:', position);
     console.log('🎯 selectedEvent:', selectedEvent?.id, selectedEvent?.name);
-    console.log('📋 assignments:', assignments.length, 'assignments');
-    console.log('📋 assignments détail:', assignments.map(a => ({ 
+    
+    // 🔥 Utiliser assignmentsRef.current au lieu de assignments pour éviter les closures stale
+    const currentAssignments = assignmentsRef.current;
+    console.log('📋 assignments:', currentAssignments.length, 'assignments');
+    console.log('📋 assignments détail:', currentAssignments.map(a => ({ 
       agentId: a.agent?.id, 
       agentCIN: a.agent?.cin,
       agentName: a.agent?.firstName + ' ' + a.agent?.lastName,
@@ -464,7 +469,7 @@ const RealTimeTracking = () => {
     // Vérifier si la personne est assignée à l'événement sélectionné
     // Le simulateur envoie le CIN comme userId, pas l'UUID
     if (selectedEvent) {
-      const assignment = assignments.find(a => 
+      const assignment = currentAssignments.find(a => 
         a.agent?.cin === position.userId || a.agent?.id === position.userId
       );
       
