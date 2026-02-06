@@ -44,7 +44,7 @@ module.exports = (sequelize) => {
       allowNull: true
     },
     createdBy: {
-      type: DataTypes.CHAR(36),
+      type: DataTypes.UUID,
       allowNull: true,
       references: {
         model: 'users',
