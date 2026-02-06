@@ -387,7 +387,7 @@ const startServer = async () => {
     await cleanupDatabaseIndexes(db.sequelize);
 
     // Sync database (create tables if they don't exist)
-    if (process.env.NODE_ENV !== 'production') {
+    if (process.env.NODE_ENV !== 'production' || process.env.FORCE_DB_SYNC === 'true') {
       await db.sequelize.sync({ alter: false });
       console.log('✅ Database synchronized.');
 
