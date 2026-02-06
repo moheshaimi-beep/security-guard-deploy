@@ -117,7 +117,8 @@ const AdminLogs = () => {
       });
 
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/audit/export?${params}`, {
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${API_URL}/audit/export?${params}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }

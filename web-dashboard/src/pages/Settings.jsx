@@ -103,7 +103,8 @@ const Settings = () => {
   const fetchApiDocumentation = async () => {
     setApiLoading(true);
     try {
-      const response = await fetch('http://localhost:5000/api/api-docs', {
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${API_URL}/api-docs`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }
@@ -181,7 +182,8 @@ const Settings = () => {
 
   const exportApiDocs = async () => {
     try {
-      const response = await fetch('http://localhost:5000/api/api-docs/export', {
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${API_URL}/api-docs/export`, {
         headers: {
           'Authorization': `Bearer ${localStorage.getItem('token')}`
         }

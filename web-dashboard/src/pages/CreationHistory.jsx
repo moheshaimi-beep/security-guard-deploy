@@ -100,7 +100,8 @@ const CreationHistory = () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
-      const response = await fetch('http://localhost:5000/api/creation-history/agents', {
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${API_URL}/creation-history/agents`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
@@ -125,7 +126,8 @@ const CreationHistory = () => {
   const fetchAgentDetails = async (agentId) => {
     try {
       const token = localStorage.getItem('accessToken') || localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5000/api/creation-history/agents/${agentId}`, {
+      const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:5000/api';
+      const response = await fetch(`${API_URL}/creation-history/agents/${agentId}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
