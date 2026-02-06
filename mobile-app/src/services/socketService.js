@@ -5,7 +5,7 @@
 
 import { io } from 'socket.io-client';
 
-const SOCKET_URL = 'http://localhost:5000'; // ⚠️ À modifier pour production
+const SOCKET_URL = 'https://security-guard-backend.onrender.com'; // Production Render
 
 class SocketService {
   constructor() {
