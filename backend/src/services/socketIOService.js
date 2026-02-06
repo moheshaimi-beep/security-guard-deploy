@@ -210,7 +210,8 @@ class SocketIOService {
             heading: heading || null,
             batteryLevel: batteryLevel || null,
             isMoving: isCurrentlyMoving,
-            timestamp: new Date()
+            timestamp: new Date(),
+            recordedAt: new Date() // ✅ Champ obligatoire
           });
         } catch (dbError) {
           console.error('❌ Erreur sauvegarde position:', dbError.message);
@@ -257,6 +258,7 @@ class SocketIOService {
         },
         include: [{
           model: User,
+          as: 'user', // ✅ Alias requis
           attributes: ['id', 'firstName', 'lastName', 'employeeId', 'role', 'phone', 'cin']
         }],
         order: [['timestamp', 'DESC']],
@@ -264,7 +266,7 @@ class SocketIOService {
       });
       
       const dbPositionsFormatted = dbPositions.map(pos => ({
-        userId: pos.User?.cin || pos.userId,
+        userId: pos.user?.cin || pos.userId,
         latitude: pos.latitude,
         longitude: pos.longitude,
         accuracy: pos.accuracy,
@@ -273,14 +275,14 @@ class SocketIOService {
         batteryLevel: pos.batteryLevel,
         timestamp: pos.timestamp.getTime(),
         isMoving: pos.isMoving,
-        user: pos.User ? {
-          id: pos.User.id,
-          cin: pos.User.cin,
-          firstName: pos.User.firstName,
-          lastName: pos.User.lastName,
-          employeeId: pos.User.employeeId,
-          role: pos.User.role,
-          phone: pos.User.phone
+        user: pos.user ? {
+          id: pos.user.id,
+          cin: pos.user.cin,
+          firstName: pos.user.firstName,
+          lastName: pos.user.lastName,
+          employeeId: pos.user.employeeId,
+          role: pos.user.role,
+          phone: pos.user.phone
         } : null
       }));
       
