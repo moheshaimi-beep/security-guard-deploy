@@ -1,7 +1,7 @@
 services:
-  # Frontend Web Service (changed from static to web with express server)
+  # Frontend Web Service (Node.js + Express for SPA routing)
   - type: web
-    name: security-guard-frontend
+    name: security-guard-web
     env: node
     plan: free
     rootDir: web-dashboard
