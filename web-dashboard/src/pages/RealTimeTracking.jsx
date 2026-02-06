@@ -133,7 +133,23 @@ const RealTimeTracking = () => {
   const isMountedRef = useRef(true); // Pour éviter les reconnexions après démontage
   const animationsRef = useRef(new Map()); // Pour les animations en cours
 
-  // 🔄 SOCKET.IO - Synchronisation temps réel GPS
+  // � Mettre à jour les stats automatiquement quand agents/supervisors changent
+  useEffect(() => {
+    const allPeople = [...Array.from(agents.values()), ...Array.from(supervisors.values())];
+    const moving = allPeople.filter(a => a.isMoving).length;
+    const total = agents.size + supervisors.size;
+    const stopped = total - moving;
+    const lowBattery = allPeople.filter(a => a.batteryLevel && a.batteryLevel < 20).length;
+    
+    setStats({
+      total,
+      moving,
+      stopped,
+      lowBattery
+    });
+  }, [agents, supervisors]);
+
+  // �🔄 SOCKET.IO - Synchronisation temps réel GPS
   const { isConnected } = useSync(user?.id, ['location:all', user?.role === 'supervisor' ? 'supervisor' : 'agent']);
 
   // Notification de connexion Socket.IO sync
@@ -587,25 +603,7 @@ const RealTimeTracking = () => {
         });
       }
     }
-    
-    updateStats();
-  };
-
-  const updateStats = () => {
-    setStats(prev => {
-      const allPeople = [...Array.from(agents.values()), ...Array.from(supervisors.values())];
-      const moving = allPeople.filter(a => a.isMoving).length;
-      const total = agents.size + supervisors.size;
-      const stopped = total - moving;
-      const lowBattery = allPeople.filter(a => a.batteryLevel && a.batteryLevel < 20).length;
-      
-      return {
-        total,
-        moving,
-        stopped,
-        lowBattery
-      };
-    });
+    // Stats mises à jour automatiquement via useEffect
   };
 
   // Fonction pour calculer l'offset des marqueurs superposés
