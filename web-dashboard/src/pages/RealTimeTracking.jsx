@@ -288,27 +288,40 @@ const RealTimeTracking = () => {
         params: { status: 'active,scheduled' }
       });
       
+      // Debug structure complète
+      console.log('🔍 Structure response complète:', response);
+      console.log('🔍 response.data:', response.data);
+      console.log('🔍 Type de response.data:', typeof response.data);
+      console.log('🔍 Clés de response.data:', response.data ? Object.keys(response.data) : 'null');
+      
       // Extraire correctement le tableau selon la structure de la réponse
       let allEvents = [];
       
       if (response.data) {
         // Si response.data.data existe et est un tableau
         if (Array.isArray(response.data.data)) {
+          console.log('✅ Trouvé dans response.data.data');
           allEvents = response.data.data;
         }
         // Sinon si response.data.events existe et est un tableau
         else if (Array.isArray(response.data.events)) {
+          console.log('✅ Trouvé dans response.data.events');
           allEvents = response.data.events;
         }
         // Sinon si response.data est directement un tableau
         else if (Array.isArray(response.data)) {
+          console.log('✅ response.data est directement un tableau');
           allEvents = response.data;
         }
         // Sinon structure inconnue, extraire le premier tableau trouvé
         else if (typeof response.data === 'object') {
+          console.log('🔎 Recherche tableau dans l\'objet...');
           const firstArrayValue = Object.values(response.data).find(val => Array.isArray(val));
           if (firstArrayValue) {
+            console.log('✅ Tableau trouvé via fallback');
             allEvents = firstArrayValue;
+          } else {
+            console.error('❌ Aucun tableau trouvé dans response.data');
           }
         }
       }
