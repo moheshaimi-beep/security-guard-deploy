@@ -1,20 +1,24 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
-import { MapContainer, TileLayer, Marker, Popup, Polyline, Circle, useMap, Tooltip } from 'react-leaflet';
+import React, { useState, useEffect, useRef } from 'react';
+import { MapContainer, TileLayer, Marker, Popup, Circle, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { 
-  FiUsers, FiActivity, FiBattery, FiMapPin, FiClock
+  FiUsers, FiActivity, FiBattery, FiMapPin, FiClock, FiZap,
+  FiWifi, FiWifiOff, FiMaximize2, FiMinimize2, FiFilter,
+  FiSearch, FiRefreshCw, FiNavigation, FiAlertCircle, FiCheckCircle,
+  FiMenu, FiX
 } from 'react-icons/fi';
 import { toast } from 'react-toastify';
 import { io } from 'socket.io-client';
 import api from '../services/api';
 import useAuthStore from '../hooks/useAuth';
-import { useSync, useSyncEvent } from '../hooks/useSync';
 
 // Socket.IO URL
-const SOCKET_URL = process.env.REACT_APP_SOCKET_URL || 'http://localhost:5000';
+const SOCKET_URL = process.env.REACT_APP_API_URL?.replace('/api', '') || 
+                   process.env.REACT_APP_SOCKET_URL || 
+                   'https://security-guard-backend.onrender.com';
 
-// Fix Leaflet default marker icons
+// Fix Leaflet icons
 delete L.Icon.Default.prototype._getIconUrl;
 L.Icon.Default.mergeOptions({
   iconRetinaUrl: require('leaflet/dist/images/marker-icon-2x.png'),
@@ -33,66 +37,196 @@ function RecenterMap({ center }) {
   return null;
 }
 
-// Créer des icônes personnalisées pour les agents et responsables
-const createAgentIcon = (isMoving, batteryLevel, role, type = 'agent') => {
-  let color = '#10B981'; // Vert par défaut
+// Icônes personnalisées agents - VERSION AMÉLIORÉE
+const createAgentIcon = (isMoving, batteryLevel, role) => {
+  const isSupervisor = role === 'supervisor';
   
-  if (batteryLevel && batteryLevel < 20) {
-    color = '#EF4444'; // Rouge si batterie faible
-  } else if (!isMoving) {
-    color = '#F59E0B'; // Orange si arrêté
+  // Couleurs sophistiquées selon le rôle et l'état
+  let mainColor, accentColor, gradientStart, gradientEnd;
+  
+  if (isSupervisor) {
+    // Superviseur : Gradient violet/bleu
+    gradientStart = '#8B5CF6'; // Violet
+    gradientEnd = '#6366F1'; // Indigo
+    mainColor = '#8B5CF6';
+    accentColor = '#FCD34D'; // Or pour badge
+  } else {
+    // Agent : Couleur selon état
+    if (batteryLevel < 20) {
+      gradientStart = '#EF4444'; // Rouge
+      gradientEnd = '#DC2626';
+      mainColor = '#EF4444';
+      accentColor = '#FCA5A5';
+    } else if (!isMoving) {
+      gradientStart = '#F59E0B'; // Orange
+      gradientEnd = '#D97706';
+      mainColor = '#F59E0B';
+      accentColor = '#FCD34D';
+    } else {
+      gradientStart = '#10B981'; // Vert
+      gradientEnd = '#059669';
+      mainColor = '#10B981';
+      accentColor = '#6EE7B7';
+    }
   }
   
-  // Icône et taille selon le type
-  const icon = type === 'supervisor' ? '👔' : '👤';
-  const size = type === 'supervisor' ? 45 : 40;
-  const borderColor = type === 'supervisor' ? '#9333EA' : 'white';
+  const size = isSupervisor ? 54 : 44;
+  const iconSize = isSupervisor ? 24 : 20;
   
-  const html = `
+  // SVG Icons professionnels
+  const agentSVG = `
+    <svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="white">
+      <path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/>
+    </svg>
+  `;
+  
+  const supervisorSVG = `
+    <svg width="${iconSize}" height="${iconSize}" viewBox="0 0 24 24" fill="white">
+      <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/>
+      <circle cx="12" cy="8" r="3" fill="${accentColor}"/>
+    </svg>
+  `;
+  
+  const icon = isSupervisor ? supervisorSVG : agentSVG;
+  
+  // Badge de rôle
+  const roleBadge = isSupervisor ? `
     <div style="
-      position: relative;
-      width: ${size}px;
-      height: ${size}px;
+      position: absolute;
+      top: -8px;
+      right: -8px;
+      width: 24px;
+      height: 24px;
+      background: linear-gradient(135deg, ${accentColor}, #FBBF24);
+      border-radius: 50%;
+      border: 2px solid white;
       display: flex;
       align-items: center;
       justify-content: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+      font-size: 12px;
+      z-index: 10;
+    ">👑</div>
+  ` : '';
+  
+  // Indicateur batterie faible
+  const batteryWarning = batteryLevel < 20 && !isSupervisor ? `
+    <div style="
+      position: absolute;
+      top: -6px;
+      left: -6px;
+      width: 20px;
+      height: 20px;
+      background: #EF4444;
+      border-radius: 50%;
+      border: 2px solid white;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 2px 8px rgba(239, 68, 68, 0.5);
+      animation: batteryBlink 1s infinite;
+      z-index: 10;
     ">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="white">
+        <path d="M15.67 4H14V2h-4v2H8.33C7.6 4 7 4.6 7 5.33v15.33C7 21.4 7.6 22 8.33 22h7.33c.74 0 1.34-.6 1.34-1.33V5.33C17 4.6 16.4 4 15.67 4z"/>
+      </svg>
+    </div>
+  ` : '';
+  
+  // Effet de mouvement
+  const movementEffect = isMoving ? `
+    <div style="
+      position: absolute;
+      width: ${size + 24}px;
+      height: ${size + 24}px;
+      border: 3px solid ${mainColor};
+      border-radius: 50%;
+      animation: ripple 1.8s ease-out infinite;
+      top: -12px;
+      left: -12px;
+    "></div>
+    <div style="
+      position: absolute;
+      width: ${size + 12}px;
+      height: ${size + 12}px;
+      border: 2px solid ${accentColor};
+      border-radius: 50%;
+      animation: ripple 1.8s ease-out 0.6s infinite;
+      top: -6px;
+      left: -6px;
+    "></div>
+  ` : '';
+  
+  const html = `
+    <div style="position: relative; width: ${size}px; height: ${size}px;">
+      ${movementEffect}
+      
+      <!-- Marqueur principal -->
       <div style="
         position: absolute;
         width: ${size}px;
         height: ${size}px;
-        background: ${color};
+        background: linear-gradient(135deg, ${gradientStart} 0%, ${gradientEnd} 100%);
         border-radius: 50%;
-        border: 3px solid ${borderColor};
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        border: ${isSupervisor ? '4px' : '3px'} solid white;
+        box-shadow: 
+          0 8px 16px rgba(0,0,0,0.3),
+          0 0 0 ${isSupervisor ? '4px' : '2px'} ${mainColor}40,
+          inset 0 2px 8px rgba(255,255,255,0.3);
         display: flex;
         align-items: center;
         justify-content: center;
-        font-size: ${type === 'supervisor' ? 22 : 20}px;
-        ${isMoving ? 'animation: pulse 1.5s infinite;' : ''}
+        ${isMoving ? 'animation: markerPulse 2s ease-in-out infinite;' : ''}
+        transition: all 0.3s ease;
+        z-index: 5;
       ">
         ${icon}
       </div>
-      ${isMoving ? `
-        <div style="
-          position: absolute;
-          width: ${size + 20}px;
-          height: ${size + 20}px;
-          border: 2px solid ${color};
-          border-radius: 50%;
-          animation: ripple 1.5s infinite;
-          opacity: 0.6;
-        "></div>
-      ` : ''}
+      
+      ${roleBadge}
+      ${batteryWarning}
+      
+      <!-- Ombre portée animée -->
+      <div style="
+        position: absolute;
+        width: ${size * 0.6}px;
+        height: 8px;
+        background: radial-gradient(ellipse at center, rgba(0,0,0,0.4) 0%, transparent 70%);
+        border-radius: 50%;
+        bottom: -4px;
+        left: 50%;
+        transform: translateX(-50%);
+        ${isMoving ? 'animation: shadowPulse 2s ease-in-out infinite;' : ''}
+      "></div>
     </div>
+    
     <style>
-      @keyframes pulse {
-        0%, 100% { transform: scale(1); }
-        50% { transform: scale(1.1); }
+      @keyframes markerPulse {
+        0%, 100% { transform: scale(1) translateY(0); }
+        50% { transform: scale(1.12) translateY(-2px); }
       }
       @keyframes ripple {
-        0% { transform: scale(0.5); opacity: 1; }
-        100% { transform: scale(1.5); opacity: 0; }
+        0% { 
+          transform: scale(0.6); 
+          opacity: 0.8; 
+        }
+        100% { 
+          transform: scale(1.6); 
+          opacity: 0; 
+        }
+      }
+      @keyframes shadowPulse {
+        0%, 100% { transform: translateX(-50%) scale(1); opacity: 0.4; }
+        50% { transform: translateX(-50%) scale(1.2); opacity: 0.2; }
+      }
+      @keyframes batteryBlink {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.6; transform: scale(1.15); }
+      }
+      .custom-agent-marker:hover {
+        z-index: 1000 !important;
+        transform: scale(1.15);
+        transition: transform 0.2s ease;
       }
     </style>
   `;
@@ -100,19 +234,16 @@ const createAgentIcon = (isMoving, batteryLevel, role, type = 'agent') => {
   return L.divIcon({
     html,
     className: 'custom-agent-marker',
-    iconSize: [40, 40],
-    iconAnchor: [20, 20],
-    popupAnchor: [0, -20]
+    iconSize: [size, size],
+    iconAnchor: [size/2, size/2 + 4],
+    popupAnchor: [0, -(size/2 + 4)]
   });
 };
 
 const RealTimeTracking = () => {
-  const { user } = useAuthStore(); // Obtenir l'utilisateur depuis Zustand
+  const { user } = useAuthStore();
   const [events, setEvents] = useState([]);
   const [selectedEvent, setSelectedEvent] = useState(null);
-  const [assignments, setAssignments] = useState([]);
-  const assignmentsRef = useRef([]); // 🔥 Ref pour éviter les closures stale
-  const [supervisorsWithAgents, setSupervisorsWithAgents] = useState([]);
   const [agents, setAgents] = useState(new Map());
   const [stats, setStats] = useState({
     total: 0,
@@ -120,1236 +251,605 @@ const RealTimeTracking = () => {
     stopped: 0,
     lowBattery: 0
   });
-  const [mapCenter, setMapCenter] = useState([33.5731, -7.5898]); // Casablanca par défaut
+  const [mapCenter, setMapCenter] = useState([33.5731, -7.5898]); // Casablanca
   const [connected, setConnected] = useState(false);
-  const [trails, setTrails] = useState(new Map()); // Traînées de mouvement
   const [loading, setLoading] = useState(true);
-  const [showSidebar, setShowSidebar] = useState(true);
-  const [supervisors, setSupervisors] = useState(new Map()); // Positions des responsables
-  const [collapsedGroups, setCollapsedGroups] = useState(new Set()); // Groupes pliés
-  const [currentTime, setCurrentTime] = useState(Date.now()); // Pour le countdown
+  const [showSidebar, setShowSidebar] = useState(window.innerWidth >= 768);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [filterStatus, setFilterStatus] = useState('all');
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [autoCenter, setAutoCenter] = useState(true);
+  const [selectedAgent, setSelectedAgent] = useState(null);
   
   const socketRef = useRef(null);
-  const isMountedRef = useRef(true); // Pour éviter les reconnexions après démontage
-  const animationsRef = useRef(new Map()); // Pour les animations en cours
+  const isMountedRef = useRef(true);
+  const mapRef = useRef(null);
 
-  // � Mettre à jour les stats automatiquement quand agents/supervisors changent
+  // Responsive sidebar
   useEffect(() => {
-    const allPeople = [...Array.from(agents.values()), ...Array.from(supervisors.values())];
-    const moving = allPeople.filter(a => a.isMoving).length;
-    const total = agents.size + supervisors.size;
-    const stopped = total - moving;
-    const lowBattery = allPeople.filter(a => a.batteryLevel && a.batteryLevel < 20).length;
-    
-    setStats({
-      total,
-      moving,
-      stopped,
-      lowBattery
-    });
-  }, [agents, supervisors]);
-
-  // �🔄 SOCKET.IO - Synchronisation temps réel GPS
-  const { isConnected } = useSync(user?.id, ['location:all', user?.role === 'supervisor' ? 'supervisor' : 'agent']);
-
-  // Notification de connexion Socket.IO sync
-  useEffect(() => {
-    if (isConnected) {
-      toast.success('🗺️ Suivi GPS temps réel activé', { autoClose: 2000 });
-    }
-  }, [isConnected]);
-
-  // Événement: Position mise à jour
-  useSyncEvent('location:updated', ({ userId, latitude, longitude, accuracy, speed, battery }) => {
-    setAgents(prev => {
-      const newAgents = new Map(prev);
-      const agent = newAgents.get(userId);
-      if (agent) {
-        newAgents.set(userId, {
-          ...agent,
-          latitude,
-          longitude,
-          accuracy,
-          speed,
-          battery,
-          isMoving: speed > 0.5,
-          lastUpdate: new Date()
-        });
+    const handleResize = () => {
+      if (window.innerWidth >= 768) {
+        setShowSidebar(true);
       }
-      return newAgents;
-    });
-  });
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
 
-  // Événement: Agent entre/sort d'une zone
-  useSyncEvent('zone:entered', ({ userId, zoneName }) => {
-    const agent = Array.from(agents.values()).find(a => a.userId === userId);
-    if (agent) {
-      toast.info(`📍 ${agent.firstName} est entré dans ${zoneName}`);
-    }
-  });
-
-  useSyncEvent('zone:exited', ({ userId, zoneName }) => {
-    const agent = Array.from(agents.values()).find(a => a.userId === userId);
-    if (agent) {
-      toast.warning(`📍 ${agent.firstName} a quitté ${zoneName}`);
-    }
-  });
-  
-  // Charger les événements au démarrage
+  // Charger événements
   useEffect(() => {
     loadEvents();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => { isMountedRef.current = false; };
   }, []);
-  
-  // Mettre à jour le temps écoulé toutes les secondes
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentTime(Date.now());
-    }, 1000);
-    return () => clearInterval(interval);
-  }, []);
-  
-  // Fonction pour calculer le temps écoulé
-  const getElapsedTime = (timestamp) => {
-    if (!timestamp) return 'N/A';
-    const seconds = Math.floor((currentTime - new Date(timestamp).getTime()) / 1000);
-    if (seconds < 60) return `${seconds}s`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${seconds % 60}s`;
-    return `${Math.floor(seconds / 3600)}h ${Math.floor((seconds % 3600) / 60)}m`;
-  };
-  
-  // ========================================
-  // 🔌 Socket.IO Connection Logic
-  // ========================================
-  const connectSocketIO = useCallback(() => {
-    // Ne pas se reconnecter si déjà connecté
-    if (socketRef.current?.connected) {
-      console.log('ℹ️ Socket.IO déjà connecté, pas de reconnexion');
-      return;
-    }
-    
+
+  const loadEvents = async () => {
     try {
-      const socket = io(SOCKET_URL, {
-        path: '/socket.io/',
-        transports: ['websocket', 'polling'],
-        reconnection: true,
-        reconnectionDelay: 1000,
-        reconnectionDelayMax: 5000,
-        reconnectionAttempts: Infinity,
-        timeout: 20000,
-        autoConnect: true,
-        forceNew: false,
-        multiplex: true,
-        upgrade: true,
-        rememberUpgrade: true,
-        withCredentials: true
+      const response = await api.get('/api/events', {
+        params: { status: 'active,scheduled' }
       });
+      const evts = response.data.data || [];
+      setEvents(evts);
       
-      socket.on('connect', () => {
-        console.log('✅ Socket.IO Tracking connecté');
-        setConnected(true);
-        
-        // S'authentifier avec l'utilisateur Zustand
-        if (user) {
-          console.log('🔑 Authentification Socket.IO avec:', {
-            userId: user.id,
-            role: user.role,
-            eventId: selectedEvent?.id
-          });
-          socket.emit('auth', {
-            userId: user.id,
-            role: user.role,
-            eventId: selectedEvent?.id
-          });
-        } else {
-          console.error('❌ Utilisateur non connecté! Veuillez vous reconnecter.');
-        }
-      });
-
-      socket.on('auth:success', (data) => {
-        console.log('✅ Authentifié Socket.IO:', data);
-        // S'abonner au tracking si un événement est sélectionné
-        if (selectedEvent?.id) {
-          socket.emit('tracking:subscribe', selectedEvent.id);
-        }
-      });
-
-      socket.on('auth:error', (error) => {
-        console.error('❌ Erreur authentification Socket.IO:', error);
-        toast.error('Erreur d\'authentification temps réel');
-      });
-      
-      socket.on('tracking:position_update', (data) => {
-        console.log('📍 Position reçue Socket.IO:', data);
-        handleSocketIOMessage(data);
-      });
-
-      socket.on('tracking:current_positions', (positions) => {
-        console.log('📊 Positions actuelles reçues:', positions.length);
-        positions.forEach(position => handleSocketIOMessage(position));
-      });
-      
-      socket.on('disconnect', (reason) => {
-        console.log('🔴 Socket.IO Tracking déconnecté:', reason);
-        setConnected(false);
-        if (reason === 'io server disconnect') {
-          // Server forcibly disconnected, reconnect manually
-          socket.connect();
-        }
-      });
-      
-      socket.on('connect_error', (error) => {
-        console.error('❌ Erreur connexion Socket.IO:', error.message);
-        setConnected(false);
-      });
-      
-      socket.on('reconnect_attempt', (attemptNumber) => {
-        console.log(`🔄 Tentative de reconnexion Socket.IO ${attemptNumber}`);
-      });
-      
-      socket.on('reconnect', (attemptNumber) => {
-        console.log(`✅ Reconnecté Socket.IO après ${attemptNumber} tentatives`);
-        setConnected(true);
-        // Re-authenticate after reconnection
-        if (user) {
-          socket.emit('auth', {
-            userId: user.id,
-            role: user.role,
-            eventId: selectedEvent?.id
-          });
-        }
-      });
-      
-      socket.on('reconnect_error', (error) => {
-        console.error('❌ Erreur de reconnexion Socket.IO:', error.message);
-      });
-      
-      socket.on('reconnect_failed', () => {
-        console.error('❌ Échec de la reconnexion Socket.IO après toutes les tentatives');
-        toast.error('Impossible de se connecter au serveur temps réel');
-      });
-      
-      socketRef.current = socket;
+      const activeEvent = evts.find(e => e.status === 'active');
+      if (activeEvent) {
+        setSelectedEvent(activeEvent);
+      }
     } catch (error) {
-      console.error('Erreur connexion Socket.IO:', error);
+      console.error('Erreur chargement événements:', error);
+      toast.error('Erreur chargement événements');
+    } finally {
+      setLoading(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, selectedEvent]); // ⚠️ Dépendances pour la closure
-  
-  // Recentrer la carte quand l'événement change
+  };
+
+  // Socket.IO connection
   useEffect(() => {
-    if (selectedEvent?.latitude && selectedEvent?.longitude) {
-      setMapCenter([selectedEvent.latitude, selectedEvent.longitude]);
-    }
-  }, [selectedEvent]);
-  
-  // Connexion Socket.IO - se connecte UNE SEULE FOIS au montage du composant
-  useEffect(() => {
-    isMountedRef.current = true;
-    connectSocketIO();
+    if (!selectedEvent) return;
+
+    console.log('🔌 Connexion Socket.IO:', SOCKET_URL);
+    
+    const socket = io(SOCKET_URL, {
+      transports: ['websocket', 'polling'],
+      reconnection: true,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 1000
+    });
+    
+    socketRef.current = socket;
+
+    socket.on('connect', () => {
+      console.log('✅ Socket.IO connecté');
+      setConnected(true);
+      toast.success('📡 Temps réel activé', { autoClose: 2000 });
+      
+      socket.emit('auth', {
+        userId: user.id,
+        role: user.role,
+        eventId: selectedEvent.id,
+        token: localStorage.getItem('token')
+      });
+    });
+
+    socket.on('auth:success', () => {
+      console.log('✅ Auth Socket.IO réussie');
+      socket.emit('tracking:subscribe', selectedEvent.id);
+    });
+
+    socket.on('disconnect', () => {
+      console.log('❌ Socket.IO déconnecté');
+      setConnected(false);
+      toast.error('📡 Connexion perdue');
+    });
+
+    socket.on('tracking:position', (data) => {
+      if (!isMountedRef.current) return;
+      
+      setAgents(prev => {
+        const newAgents = new Map(prev);
+        newAgents.set(data.userId, {
+          ...data,
+          lastUpdate: Date.now()
+        });
+        return newAgents;
+      });
+    });
+
+    socket.on('tracking:positions', (positions) => {
+      if (!isMountedRef.current) return;
+      
+      setAgents(prev => {
+        const newAgents = new Map();
+        positions.forEach(pos => {
+          newAgents.set(pos.userId, {
+            ...pos,
+            lastUpdate: Date.now()
+          });
+        });
+        return newAgents;
+      });
+    });
+
+    socket.on('tracking:disabled', ({ message, detailedMessage }) => {
+      toast.warning(detailedMessage || message, { autoClose: 5000 });
+      setConnected(false);
+    });
+
+    socket.on('tracking:error', ({ message }) => {
+      toast.error(message);
+    });
+
     return () => {
-      isMountedRef.current = false;
       if (socketRef.current) {
         socketRef.current.disconnect();
       }
     };
-  }, [connectSocketIO]); // ✅ Se reconnecte quand connectSocketIO change (user ou selectedEvent)
-  
-  // 🔄 Mettre à jour l'abonnement quand l'événement change
+  }, [selectedEvent, user]);
+
+  // Calculer stats
   useEffect(() => {
-    if (socketRef.current?.connected && selectedEvent && user) {
-      console.log('🔄 Mise à jour eventId dans Socket.IO:', selectedEvent.id);
-      socketRef.current.emit('tracking:subscribe', selectedEvent.id);
-    }
-  }, [selectedEvent, user]); // ✅ Update subscription quand event change
-  
-  const loadEvents = async () => {
-    try {
-      setLoading(true);
-      console.log('📅 Chargement des événements...');
-      const response = await api.get('/events');
-      
-      // Filtrer les événements actifs et futurs
-      const activeAndFutureEvents = response.data.data.events.filter(event => {
-        // Utiliser le status calculé par le backend
-        return event.status === 'active' || event.status === 'pending';
-      });
-      
-      console.log(`📊 ${activeAndFutureEvents.length} événements actifs/futurs trouvés`);
-      
-      // Trier par date (les actifs en premier, puis par date de début)
-      activeAndFutureEvents.sort((a, b) => {
-        // Les événements actifs en premier
-        if (a.status === 'active' && b.status !== 'active') return -1;
-        if (a.status !== 'active' && b.status === 'active') return 1;
-        // Sinon trier par date de début
-        return new Date(a.startDate) - new Date(b.startDate);
-      });
-      
-      setEvents(activeAndFutureEvents);
-      
-      // Sélectionner automatiquement le premier événement actif
-      if (activeAndFutureEvents.length > 0) {
-        const firstEvent = activeAndFutureEvents[0];
-        console.log('🎯 Auto-sélection événement:', firstEvent.name);
-        setSelectedEvent(firstEvent);
-        // Charger immédiatement les assignments
-        await loadAssignments(firstEvent.id);
-      } else {
-        console.warn('⚠️ Aucun événement actif trouvé');
-      }
-      
-      setLoading(false);
-    } catch (error) {
-      console.error('❌ Erreur chargement événements:', error);
-      toast.error('Erreur lors du chargement des événements');
-      setLoading(false);
-    }
-  };
-  
-  const loadAssignments = async (eventId) => {
-    try {
-      console.log('🔍 Chargement assignments pour événement:', eventId);
-      
-      // 🔥 IMPORTANT: Vider les positions actuelles quand on change d'événement
-      console.log('🧹 Nettoyage des positions avant changement d\'événement');
-      setAgents(new Map());
-      setSupervisors(new Map());
-      setTrails(new Map());
-      
-      const response = await api.get(`/assignments?eventId=${eventId}`);
-      const assignmentsList = response.data.data.assignments || [];
-      
-      console.log(`✅ ${assignmentsList.length} assignments chargés`);
-      console.log('📋 Assignments détail:', assignmentsList.map(a => ({
-        id: a.id,
-        agentCIN: a.agent?.cin,
-        agentId: a.agent?.id,
-        agentName: `${a.agent?.firstName} ${a.agent?.lastName}`,
-        role: a.role,
-        status: a.status
-      })));
-      
-      setAssignments(assignmentsList);
-      assignmentsRef.current = assignmentsList; // 🔥 Mettre à jour la ref aussi
-      
-      // Regrouper par superviseur - EXCLURE les superviseurs de la liste des agents
-      const grouped = {};
-      
-      assignmentsList.forEach(assignment => {
-        const agent = assignment.agent;
-        const supervisor = assignment.supervisor;
-        
-        if (!agent) {
-          console.warn('⚠️ Assignment sans agent:', assignment.id);
-          return;
-        }
-        
-        // Si pas de superviseur, créer un groupe "Sans responsable"
-        const supervisorId = supervisor?.id || 'no-supervisor';
-        const supervisorName = supervisor 
-          ? `${supervisor.firstName} ${supervisor.lastName}` 
-          : 'Sans responsable';
-        
-        if (!grouped[supervisorId]) {
-          grouped[supervisorId] = {
-            supervisor: supervisor || { id: 'no-supervisor', firstName: 'Sans', lastName: 'responsable' },
-            supervisorName,
-            agents: []
-          };
-        }
-        
-        // ✅ NE PAS ajouter le superviseur dans sa propre liste d'agents
-        // Vérifier si l'agent est différent du superviseur
-        if (!supervisor || agent.id !== supervisor.id) {
-          grouped[supervisorId].agents.push({
-            ...agent,
-            assignmentId: assignment.id,
-            status: assignment.status
-          });
-        } else {
-          console.log(`🔄 Superviseur ${agent.firstName} ${agent.lastName} exclu de sa propre liste d'agents`);
-        }
-      });
-      
-      setSupervisorsWithAgents(Object.values(grouped));
-      
-      console.log('📊 Superviseurs et agents regroupés:', Object.values(grouped));
-      console.log(`✅ ${Object.keys(grouped).length} groupes créés`);
-    } catch (error) {
-      console.error('❌ Erreur chargement assignments:', error);
-      toast.error('Erreur lors du chargement des affectations');
-    }
-  };
-  
-  const handleSocketIOMessage = (data) => {
-    console.log('🔔 Socket.IO message reçu:', data);
+    const agentList = Array.from(agents.values());
+    const moving = agentList.filter(a => a.isMoving).length;
+    const total = agents.size;
+    const stopped = total - moving;
+    const lowBattery = agentList.filter(a => a.batteryLevel && a.batteryLevel < 20).length;
     
-    // Socket.IO envoie directement les données sans wrapper "type"
-    // On détecte le type de message par la structure
-    if (data.userId && data.latitude && data.longitude) {
-      // C'est une mise à jour de position
-      console.log('📍 Nouvelle position Socket.IO reçue:', data);
-      console.log('🔢 agents.size avant update:', agents.size);
-      console.log('🔢 supervisors.size avant update:', supervisors.size);
-      updatePersonPosition(data);
-      console.log('🔢 agents.size après update:', agents.size);
-      console.log('🔢 supervisors.size après update:', supervisors.size);
-    } else if (data.error) {
-      // C'est une erreur
-      console.error('❌ Erreur Socket.IO:', data.error);
-      toast.error(data.error);
+    setStats({ total, moving, stopped, lowBattery });
+
+    if (autoCenter && agentList.length > 0) {
+      const lats = agentList.map(a => a.latitude).filter(Boolean);
+      const lngs = agentList.map(a => a.longitude).filter(Boolean);
+      if (lats.length > 0 && lngs.length > 0) {
+        const avgLat = lats.reduce((a, b) => a + b, 0) / lats.length;
+        const avgLng = lngs.reduce((a, b) => a + b, 0) / lngs.length;
+        setMapCenter([avgLat, avgLng]);
+      }
+    }
+  }, [agents, autoCenter]);
+
+  // Filtrer agents avec useMemo
+  const filteredAgents = React.useMemo(() => {
+    return Array.from(agents.values()).filter(agent => {
+      const matchesSearch = !searchTerm || 
+        agent.user?.firstName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        agent.user?.lastName?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        agent.user?.cin?.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesFilter = 
+        filterStatus === 'all' ||
+        (filterStatus === 'moving' && agent.isMoving) ||
+        (filterStatus === 'stopped' && !agent.isMoving);
+      
+      return matchesSearch && matchesFilter;
+    });
+  }, [agents, searchTerm, filterStatus]);
+
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      document.documentElement.requestFullscreen();
+      setIsFullscreen(true);
     } else {
-      console.log('⚠️ Format de message Socket.IO inconnu:', data);
+      document.exitFullscreen();
+      setIsFullscreen(false);
     }
-  };
-  
-  const updatePersonPosition = (position, animate = true) => {
-    console.log('📍 updatePersonPosition appelée:', position);
-    console.log('🎯 selectedEvent:', selectedEvent?.id, selectedEvent?.name);
-    
-    // 🔥 Utiliser assignmentsRef.current au lieu de assignments pour éviter les closures stale
-    const currentAssignments = assignmentsRef.current;
-    console.log('📋 assignments:', currentAssignments.length, 'assignments');
-    console.log('📋 assignments détail:', currentAssignments.map(a => ({ 
-      agentId: a.agent?.id, 
-      agentCIN: a.agent?.cin,
-      agentName: a.agent?.firstName + ' ' + a.agent?.lastName,
-      agentRole: a.role, // primary, backup, supervisor
-      status: a.status // confirmed, pending, etc.
-    })));
-    
-    // Vérifier si la personne est assignée à l'événement sélectionné
-    // Le simulateur envoie le CIN comme userId, pas l'UUID
-    if (selectedEvent) {
-      const assignment = currentAssignments.find(a => 
-        a.agent?.cin === position.userId || a.agent?.id === position.userId
-      );
-      
-      const isAssigned = !!assignment;
-      
-      console.log(`User ${position.userId}: isAssigned=${isAssigned}, status=${assignment?.status}, assignment role=${assignment?.role}`);
-      
-      if (!isAssigned) {
-        console.log(`❌ User ${position.userId} ignoré - pas affecté à cet événement`);
-        return; // Ignorer si pas affecté à cet événement
-      }
-      
-      // Déterminer si c'est un agent ou superviseur basé sur le rôle
-      // Les superviseurs peuvent avoir role='supervisor' dans User OU dans Assignment
-      const isSupervisorRole = assignment.role === 'supervisor' || position.user?.role === 'supervisor';
-      
-      if (isSupervisorRole) {
-        console.log('➕ Ajout/update superviseur:', position.userId);
-        setSupervisors(prev => {
-          const newSupervisors = new Map(prev);
-          const oldPosition = newSupervisors.get(position.userId);
-          
-          if (animate && oldPosition && oldPosition.latitude !== position.latitude && oldPosition.longitude !== position.longitude) {
-            animateMarkerMovement(position.userId, oldPosition, position);
-            
-            setTrails(prevTrails => {
-              const newTrails = new Map(prevTrails);
-              const trail = newTrails.get(position.userId) || [];
-              trail.push([oldPosition.latitude, oldPosition.longitude]);
-              if (trail.length > 50) trail.shift();
-              newTrails.set(position.userId, trail);
-              return newTrails;
-            });
-          }
-          
-          newSupervisors.set(position.userId, {
-            ...position,
-            firstName: position.user?.firstName || assignment.agent?.firstName || 'Inconnu',
-            lastName: position.user?.lastName || assignment.agent?.lastName || '',
-            cin: position.user?.cin || assignment.agent?.cin,
-            role: assignment.role,
-            batteryLevel: position.batteryLevel !== null && position.batteryLevel !== undefined ? position.batteryLevel : 100
-          });
-          console.log('✅ Superviseur ajouté, nouvelle taille:', newSupervisors.size);
-          console.log('📍 Position ajoutée:', position.latitude, position.longitude);
-          return newSupervisors;
-        });
-      } else {
-        console.log('➕ Ajout/update agent:', position.userId);
-        setAgents(prev => {
-          const newAgents = new Map(prev);
-          const oldPosition = newAgents.get(position.userId);
-          
-          if (animate && oldPosition && oldPosition.latitude !== position.latitude && oldPosition.longitude !== position.longitude) {
-            animateMarkerMovement(position.userId, oldPosition, position);
-            
-            setTrails(prevTrails => {
-              const newTrails = new Map(prevTrails);
-              const trail = newTrails.get(position.userId) || [];
-              trail.push([oldPosition.latitude, oldPosition.longitude]);
-              if (trail.length > 50) trail.shift();
-              newTrails.set(position.userId, trail);
-              return newTrails;
-            });
-          }
-          
-          newAgents.set(position.userId, {
-            ...position,
-            firstName: position.user?.firstName || assignment.agent?.firstName || 'Inconnu',
-            lastName: position.user?.lastName || assignment.agent?.lastName || '',
-            cin: position.user?.cin || assignment.agent?.cin,
-            role: assignment.role,
-            batteryLevel: position.batteryLevel !== null && position.batteryLevel !== undefined ? position.batteryLevel : 100
-          });
-          console.log('✅ Agent ajouté, nouvelle taille:', newAgents.size);
-          console.log('📍 Position ajoutée:', position.latitude, position.longitude);
-          return newAgents;
-        });
-      }
-    }
-    // Stats mises à jour automatiquement via useEffect
   };
 
-  // Fonction pour calculer l'offset des marqueurs superposés
-  const calculateMarkerOffset = (position, userId) => {
-    // Trouver toutes les personnes au même endroit (dans un rayon de 0.00001°)
-    const nearby = [];
-    const tolerance = 0.00001;
-    
-    // Vérifier agents
-    Array.from(agents.entries()).forEach(([id, agent]) => {
-      if (Math.abs(agent.latitude - position[0]) < tolerance && 
-          Math.abs(agent.longitude - position[1]) < tolerance) {
-        nearby.push({ id, type: 'agent' });
-      }
-    });
-    
-    // Vérifier responsables
-    Array.from(supervisors.entries()).forEach(([id, supervisor]) => {
-      if (Math.abs(supervisor.latitude - position[0]) < tolerance && 
-          Math.abs(supervisor.longitude - position[1]) < tolerance) {
-        nearby.push({ id: 'supervisor-' + id, type: 'supervisor' });
-      }
-    });
-    
-    // Si plusieurs personnes au même endroit, les disposer en cercle
-    if (nearby.length > 1) {
-      const currentId = userId.startsWith('supervisor-') ? userId : userId;
-      const index = nearby.findIndex(p => p.id === currentId || 'supervisor-' + p.id === currentId);
-      if (index !== -1) {
-        const angle = (index * 360) / nearby.length;
-        const radius = 0.00005; // ~5 mètres
-        return {
-          lat: radius * Math.cos(angle * Math.PI / 180),
-          lng: radius * Math.sin(angle * Math.PI / 180)
-        };
-      }
+  const centerOnAgent = (agent) => {
+    setSelectedAgent(agent);
+    setMapCenter([agent.latitude, agent.longitude]);
+    setAutoCenter(false);
+    if (window.innerWidth < 768) {
+      setShowSidebar(false);
     }
-    
-    return { lat: 0, lng: 0 };
-  };
-
-  const animateMarkerMovement = (userId, from, to) => {
-    // Annuler l'animation précédente si elle existe
-    if (animationsRef.current.has(userId)) {
-      cancelAnimationFrame(animationsRef.current.get(userId));
-    }
-    
-    const duration = 1000; // 1 seconde
-    const startTime = Date.now();
-    
-    const animate = () => {
-      const now = Date.now();
-      const elapsed = now - startTime;
-      const progress = Math.min(elapsed / duration, 1);
-      
-      // Easing pour un mouvement fluide
-      const eased = easeInOutCubic(progress);
-      
-      const lat = from.latitude + (to.latitude - from.latitude) * eased;
-      const lng = from.longitude + (to.longitude - from.longitude) * eased;
-      
-      setAgents(prev => {
-        const newAgents = new Map(prev);
-        const agent = newAgents.get(userId);
-        if (agent) {
-          newAgents.set(userId, {
-            ...agent,
-            latitude: lat,
-            longitude: lng
-          });
-        }
-        return newAgents;
-      });
-      
-      if (progress < 1) {
-        const frameId = requestAnimationFrame(animate);
-        animationsRef.current.set(userId, frameId);
-      } else {
-        animationsRef.current.delete(userId);
-      }
-    };
-    
-    animate();
-  };
-  
-  const easeInOutCubic = (t) => {
-    return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
   };
 
   return (
-    <div className="h-screen flex flex-col bg-gray-50">
-      {/* Header */}
-      <div className="bg-white shadow-sm border-b border-gray-200 p-4">
-        <div className="flex items-center justify-between max-w-full mx-auto">
-          <div className="flex items-center gap-3">
-            <div className="bg-blue-100 p-3 rounded-lg">
-              <FiMapPin className="text-2xl text-blue-600" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Tracking GPS Temps Réel</h1>
-              <p className="text-sm text-gray-600">Suivi des agents en direct</p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            {/* Sélecteur d'événement */}
-            <div className="relative">
-              <label className="block text-xs text-gray-600 mb-1">Événement</label>
-              <select
-                value={selectedEvent?.id || ''}
-                onChange={(e) => {
-                  const event = events.find(ev => ev.id === e.target.value);
-                  console.log('🔄 Changement événement:', event?.name);
-                  
-                  // 🧹 Nettoyer immédiatement la carte avant de changer d'événement
-                  console.log('🧹 Nettoyage de la carte et des positions');
-                  setAgents(new Map());
-                  setSupervisors(new Map());
-                  setTrails(new Map());
-                  
-                  setSelectedEvent(event);
-                  // Charger les assignments pour le nouvel événement
-                  if (event) {
-                    loadAssignments(event.id);
-                  }
-                }}
-                className="px-4 py-2 border border-gray-300 rounded-lg text-sm min-w-[300px] bg-white"
-              >
-                {events.length === 0 ? (
-                  <option value="">Aucun événement actif</option>
-                ) : (
-                  events.map(event => (
-                    <option key={event.id} value={event.id}>
-                      {event.name} - {new Date(event.startDate).toLocaleDateString('fr-FR')}
-                    </option>
-                  ))
-                )}
-              </select>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              <div className={`px-3 py-2 rounded-lg ${connected ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
-                <div className="flex items-center gap-2">
-                  <div className={`w-2 h-2 rounded-full ${connected ? 'bg-green-500' : 'bg-red-500'} ${connected ? 'animate-pulse' : ''}`}></div>
-                  <span className="text-sm font-medium">{connected ? '🟢 Temps réel actif' : '🔴 Temps réel inactif'}</span>
-                </div>
-              </div>
-              {!connected && (
-                <button
-                  onClick={() => {
-                    console.log('🔄 Reconnexion manuelle demandée');
-                    if (socketRef.current) {
-                      socketRef.current.disconnect();
-                      socketRef.current = null;
-                    }
-                    connectSocketIO();
-                  }}
-                  className="px-3 py-2 bg-blue-600 text-white rounded-lg text-sm font-medium hover:bg-blue-700 transition-colors"
-                >
-                  🔄 Reconnecter
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Stats Bar */}
-      <div className="bg-white border-b border-gray-200 p-4">
-        <div className="grid grid-cols-4 gap-4 max-w-full mx-auto">
-          <div className="flex items-center gap-3 p-3 bg-blue-50 rounded-lg">
-            <div className="bg-blue-600 p-2 rounded-lg">
-              <FiUsers className="text-white text-xl" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{stats.total}</p>
-              <p className="text-sm text-gray-600">Agents</p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-3 p-3 bg-green-50 rounded-lg">
-            <div className="bg-green-600 p-2 rounded-lg">
-              <FiActivity className="text-white text-xl" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{stats.moving}</p>
-              <p className="text-sm text-gray-600">En mouvement</p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-3 p-3 bg-orange-50 rounded-lg">
-            <div className="bg-orange-600 p-2 rounded-lg">
-              <FiClock className="text-white text-xl" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{stats.stopped}</p>
-              <p className="text-sm text-gray-600">À l'arrêt</p>
-            </div>
-          </div>
-          
-          <div className="flex items-center gap-3 p-3 bg-red-50 rounded-lg">
-            <div className="bg-red-600 p-2 rounded-lg">
-              <FiBattery className="text-white text-xl" />
-            </div>
-            <div>
-              <p className="text-2xl font-bold text-gray-900">{stats.lowBattery}</p>
-              <p className="text-sm text-gray-600">Batterie faible</p>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Map et Sidebar */}
-      <div className="flex-1 flex relative overflow-hidden">
-        {/* Sidebar Responsables & Agents */}
-        {showSidebar && (
-          <div className="w-80 bg-white border-r border-gray-200 overflow-y-auto">
-            <div className="p-4 border-b border-gray-200 bg-gray-50">
-              <h3 className="font-semibold text-gray-900 flex items-center gap-2">
-                <FiUsers className="text-blue-600" />
-                Responsables & Agents
-              </h3>
-              {selectedEvent && (
-                <p className="text-xs text-gray-600 mt-1">
-                  {supervisorsWithAgents.reduce((sum, s) => sum + s.agents.length, 0)} agent(s) • {supervisorsWithAgents.length} responsable(s)
+    <div className="h-screen bg-gray-100 flex flex-col overflow-hidden">
+      {/* Header - Ultra moderne et responsive */}
+      <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-purple-600 text-white shadow-2xl z-20">
+        <div className="px-3 py-2.5 md:px-6 md:py-4">
+          {/* Top Row */}
+          <div className="flex items-center justify-between gap-3 mb-2 md:mb-3">
+            {/* Logo + Title */}
+            <div className="flex items-center gap-2 md:gap-3 min-w-0 flex-1">
+              <FiMapPin className="text-xl md:text-3xl flex-shrink-0" />
+              <div className="min-w-0">
+                <h1 className="text-base md:text-2xl font-bold truncate">GPS Temps Réel</h1>
+                <p className="text-xs md:text-sm text-blue-100 truncate">
+                  {selectedEvent ? selectedEvent.name : 'Sélectionnez un événement'}
                 </p>
-              )}
+              </div>
             </div>
             
-            <div className="p-4">
-              {loading ? (
-                <div className="text-center py-8 text-gray-500">
-                  <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto"></div>
-                  <p className="mt-2 text-sm">Chargement...</p>
-                </div>
-              ) : supervisorsWithAgents.length === 0 ? (
-                <div className="text-center py-8 text-gray-500">
-                  <FiUsers className="text-4xl mx-auto mb-2 text-gray-400" />
-                  <p className="text-sm">Aucun agent assigné</p>
+            {/* Status + Actions */}
+            <div className="flex items-center gap-2 flex-shrink-0">
+              {/* Connexion Status */}
+              <div className={`flex items-center gap-1.5 px-2 md:px-3 py-1.5 rounded-full text-xs md:text-sm font-medium ${
+                connected ? 'bg-green-500/90' : 'bg-red-500/90'
+              }`}>
+                {connected ? <FiWifi size={14} /> : <FiWifiOff size={14} />}
+                <span className="hidden md:inline">{connected ? 'Connecté' : 'Hors ligne'}</span>
+              </div>
+              
+              {/* Fullscreen Desktop */}
+              <button
+                onClick={toggleFullscreen}
+                className="hidden md:flex p-2 hover:bg-white/20 rounded-lg transition-colors"
+                title={isFullscreen ? "Quitter plein écran" : "Plein écran"}
+              >
+                {isFullscreen ? <FiMinimize2 size={18} /> : <FiMaximize2 size={18} />}
+              </button>
+            </div>
+          </div>
+
+          {/* Event Selector */}
+          <div className="mb-2 md:mb-3">
+            <select
+              value={selectedEvent?.id || ''}
+              onChange={(e) => {
+                const evt = events.find(ev => ev.id === e.target.value);
+                setSelectedEvent(evt);
+              }}
+              className="w-full px-3 py-2 rounded-lg bg-white/20 backdrop-blur-sm border border-white/30 text-white text-sm md:text-base placeholder-white/70 focus:outline-none focus:ring-2 focus:ring-white/50"
+            >
+              <option value="" className="text-gray-900">Sélectionner un événement</option>
+              {events.map(evt => (
+                <option key={evt.id} value={evt.id} className="text-gray-900">
+                  {evt.name} - {new Date(evt.startDate).toLocaleDateString('fr-FR')}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Stats Cards - Grid responsif */}
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
+            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2 md:p-3 border border-white/20">
+              <div className="flex items-center justify-between">
+                <FiUsers className="text-lg md:text-2xl" />
+                <span className="text-xl md:text-3xl font-bold">{stats.total}</span>
+              </div>
+              <p className="text-xs text-blue-100 mt-0.5 md:mt-1">Total</p>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2 md:p-3 border border-white/20">
+              <div className="flex items-center justify-between">
+                <FiActivity className="text-lg md:text-2xl text-green-300" />
+                <span className="text-xl md:text-3xl font-bold">{stats.moving}</span>
+              </div>
+              <p className="text-xs text-blue-100 mt-0.5 md:mt-1">En mouvement</p>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2 md:p-3 border border-white/20">
+              <div className="flex items-center justify-between">
+                <FiClock className="text-lg md:text-2xl text-orange-300" />
+                <span className="text-xl md:text-3xl font-bold">{stats.stopped}</span>
+              </div>
+              <p className="text-xs text-blue-100 mt-0.5 md:mt-1">Arrêtés</p>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-sm rounded-lg p-2 md:p-3 border border-white/20">
+              <div className="flex items-center justify-between">
+                <FiBattery className="text-lg md:text-2xl text-red-300" />
+                <span className="text-xl md:text-3xl font-bold">{stats.lowBattery}</span>
+              </div>
+              <p className="text-xs text-blue-100 mt-0.5 md:mt-1">Batterie faible</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Main Content - Sidebar + Map */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Sidebar - Slide animée sur mobile */}
+        <div className={`
+          ${showSidebar ? 'translate-x-0' : '-translate-x-full'}
+          fixed md:relative z-30 h-full w-full md:w-80 lg:w-96 bg-white shadow-2xl 
+          transition-transform duration-300 ease-in-out
+        `}>
+          <div className="h-full flex flex-col">
+            {/* Sidebar Header */}
+            <div className="p-3 md:p-4 bg-gradient-to-r from-gray-50 to-blue-50 border-b border-gray-200">
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="font-bold text-gray-800 text-base md:text-lg flex items-center gap-2">
+                  <FiUsers className="text-blue-600" />
+                  Agents ({filteredAgents.length})
+                </h2>
+                <button
+                  onClick={() => setShowSidebar(false)}
+                  className="md:hidden p-1.5 hover:bg-gray-200 rounded-lg transition-colors"
+                >
+                  <FiX size={20} />
+                </button>
+              </div>
+
+              {/* Search */}
+              <div className="relative mb-2">
+                <FiSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={16} />
+                <input
+                  type="text"
+                  placeholder="Rechercher..."
+                  value={searchTerm}
+                  onChange={(e) => setSearchTerm(e.target.value)}
+                  className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent text-sm"
+                />
+              </div>
+
+              {/* Filters - Pills */}
+              <div className="flex gap-2 mb-2">
+                {[
+                  { value: 'all', label: 'Tous', icon: FiUsers },
+                  { value: 'moving', label: 'Actifs', icon: FiActivity },
+                  { value: 'stopped', label: 'Arrêtés', icon: FiClock }
+                ].map(({ value, label, icon: Icon }) => (
+                  <button
+                    key={value}
+                    onClick={() => setFilterStatus(value)}
+                    className={`flex-1 flex items-center justify-center gap-1.5 px-2 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      filterStatus === value
+                        ? 'bg-blue-600 text-white shadow-md'
+                        : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                    }`}
+                  >
+                    <Icon size={14} />
+                    <span>{label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Auto-center */}
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={autoCenter}
+                  onChange={(e) => setAutoCenter(e.target.checked)}
+                  className="rounded w-4 h-4 text-blue-600"
+                />
+                <span className="text-xs md:text-sm text-gray-700">Centrage automatique</span>
+              </label>
+            </div>
+
+            {/* Agents List */}
+            <div className="flex-1 overflow-y-auto">
+              {filteredAgents.length === 0 ? (
+                <div className="p-8 text-center text-gray-500">
+                  <FiAlertCircle className="mx-auto mb-3 text-gray-400" size={40} />
+                  <p className="text-sm font-medium">Aucun agent actif</p>
+                  <p className="text-xs text-gray-400 mt-1">Vérifiez la connexion</p>
                 </div>
               ) : (
-                <div className="space-y-4">
-                  {supervisorsWithAgents.map((group) => {
-                    // Chercher la position du superviseur par CIN ou ID
-                    const supervisorPosition = supervisors.get(group.supervisor.cin) || supervisors.get(group.supervisor.id);
-                    const isSupervisorTracked = supervisorPosition !== undefined;
-                    const isCollapsed = collapsedGroups.has(group.supervisor.id);
-                    
-                    return (
-                    <div key={group.supervisor.id} className="bg-gray-50 rounded-lg p-3">
-                      <div 
-                        className="flex items-center gap-2 mb-3 cursor-pointer hover:bg-gray-100 rounded p-2 -m-2"
-                        onClick={() => {
-                          setCollapsedGroups(prev => {
-                            const newSet = new Set(prev);
-                            if (newSet.has(group.supervisor.id)) {
-                              newSet.delete(group.supervisor.id);
-                            } else {
-                              newSet.add(group.supervisor.id);
-                            }
-                            return newSet;
-                          });
-                        }}
-                      >
-                        <div className="text-gray-500 transition-transform" style={{ transform: isCollapsed ? 'rotate(0deg)' : 'rotate(90deg)' }}>
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                        </div>
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center ${isSupervisorTracked ? 'bg-purple-500' : 'bg-purple-100'}`}>
-                          <span className="text-lg">{isSupervisorTracked ? '👔' : '👔'}</span>
-                        </div>
-                        <div className="flex-1">
-                          <p className="font-semibold text-gray-900 text-sm">
-                            {group.supervisorName}
-                          </p>
-                          <p className="text-xs text-gray-600">
-                            {group.agents.length} agent(s)
-                          </p>
-                          {isSupervisorTracked && (
-                            <p className="text-xs text-green-600 mt-1">
-                              📍 {supervisorPosition.isMoving ? 'En mouvement' : 'À l\'arrêt'}
-                            </p>
-                          )}
-                          {!isSupervisorTracked && group.supervisor.id !== 'no-supervisor' && (
-                            <p className="text-xs text-gray-400 mt-1">
-                              Position non disponible
-                            </p>
+                <div className="divide-y divide-gray-100">
+                  {filteredAgents.map(agent => (
+                    <button
+                      key={agent.userId}
+                      onClick={() => centerOnAgent(agent)}
+                      className={`w-full p-3 hover:bg-blue-50 transition-all text-left ${
+                        selectedAgent?.userId === agent.userId ? 'bg-blue-50 border-l-4 border-blue-600' : ''
+                      }`}
+                    >
+                      <div className="flex items-start gap-3">
+                        {/* Avatar animé */}
+                        <div className={`relative w-12 h-12 rounded-full flex items-center justify-center text-2xl flex-shrink-0 ${
+                          agent.isMoving ? 'bg-gradient-to-br from-green-400 to-green-600 animate-pulse' : 'bg-gradient-to-br from-orange-400 to-orange-600'
+                        } shadow-lg`}>
+                          {agent.user?.role === 'supervisor' ? '👔' : '👤'}
+                          {agent.isMoving && (
+                            <div className="absolute -right-1 -top-1 w-4 h-4 bg-green-500 rounded-full border-2 border-white animate-ping"></div>
                           )}
                         </div>
+
+                        {/* Info */}
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-start justify-between mb-1">
+                            <p className="font-semibold text-gray-900 truncate text-sm md:text-base">
+                              {agent.user?.firstName} {agent.user?.lastName}
+                            </p>
+                            {agent.isMoving ? (
+                              <FiActivity className="text-green-600 flex-shrink-0" size={18} />
+                            ) : (
+                              <FiClock className="text-orange-600 flex-shrink-0" size={18} />
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-2 text-xs text-gray-500 mb-1">
+                            <span className="bg-gray-100 px-2 py-0.5 rounded">{agent.user?.cin}</span>
+                            {agent.batteryLevel && (
+                              <span className={`flex items-center gap-1 px-2 py-0.5 rounded ${
+                                agent.batteryLevel < 20 ? 'bg-red-100 text-red-700' : 'bg-gray-100'
+                              }`}>
+                                <FiBattery size={12} />
+                                {agent.batteryLevel}%
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="flex items-center gap-1 text-xs text-gray-400">
+                            <FiClock size={11} />
+                            {new Date(agent.lastUpdate).toLocaleTimeString('fr-FR', {
+                              hour: '2-digit',
+                              minute: '2-digit',
+                              second: '2-digit'
+                            })}
+                          </div>
+                        </div>
                       </div>
-                      
-                      {!isCollapsed && (
-                      <div className="space-y-2 pl-2">
-                        {group.agents.map((agent) => {
-                          // Chercher la position de l'agent par CIN ou ID
-                          const agentPosition = agents.get(agent.cin) || agents.get(agent.id);
-                          const isTracked = agentPosition !== undefined;
-                          
-                          return (
-                            <div key={agent.id} className="flex items-center gap-2 p-2 bg-white rounded border border-gray-200">
-                              <div className={`w-2 h-2 rounded-full ${isTracked ? (agentPosition.isMoving ? 'bg-green-500 animate-pulse' : 'bg-orange-500') : 'bg-gray-300'}`}></div>
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-gray-900 text-sm truncate">
-                                  {agent.firstName} {agent.lastName}
-                                </p>
-                                <p className="text-xs text-gray-600">
-                                  {agent.employeeId}
-                                </p>
-                                {isTracked && (
-                                  <p className={`text-xs font-medium ${agentPosition.isMoving ? 'text-green-600' : 'text-orange-600'}`}>
-                                    {agentPosition.isMoving ? '🏃 En mouvement' : '🛑 À l\'arrêt'}
-                                  </p>
-                                )}
-                                {!isTracked && (
-                                  <p className="text-xs text-gray-400">
-                                    Position non disponible
-                                  </p>
-                                )}
-                              </div>
-                              {isTracked && agentPosition.batteryLevel && (
-                                <div className={`text-xs ${agentPosition.batteryLevel < 20 ? 'text-red-600' : 'text-gray-600'}`}>
-                                  🔋 {agentPosition.batteryLevel}%
-                                </div>
-                              )}
-                            </div>
-                          );
-                        })}
-                      </div>
-                      )}
-                    </div>
-                    );
-                  })}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
           </div>
-        )}
-        
-        {/* Map */}
-        <div className="flex-1 relative">
-          <MapContainer 
-            center={mapCenter} 
-            zoom={13} 
-            className="h-full w-full"
-            style={{ height: '100%', width: '100%' }}
-          >
-            <TileLayer
-              url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-              attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
-            />
-            <RecenterMap center={mapCenter} />
-            
-            {/* Zone de l'événement */}
-            {selectedEvent?.latitude && selectedEvent?.longitude && (
-              <>
-                <Circle
-                  center={[selectedEvent.latitude, selectedEvent.longitude]}
-                  radius={selectedEvent.geoRadius || 100}
-                  pathOptions={{
-                    color: 'blue',
-                    fillColor: 'blue',
-                    fillOpacity: 0.1
-                  }}
-                />
-                <Marker
-                  position={[selectedEvent.latitude, selectedEvent.longitude]}
-                  icon={L.divIcon({
-                    html: `<div style="
-                      width: 40px;
-                      height: 40px;
-                      background: #3B82F6;
-                      border-radius: 50%;
-                      border: 3px solid white;
-                      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-                      display: flex;
-                      align-items: center;
-                      justify-content: center;
-                      font-size: 20px;
-                    ">📍</div>`,
-                    className: 'custom-event-marker',
-                    iconSize: [40, 40],
-                    iconAnchor: [20, 20]
-                  })}
-                >
-                  <Tooltip direction="top" offset={[0, -20]} opacity={0.95} permanent={false}>
-                    <div style={{ 
-                      textAlign: 'center', 
-                      padding: '6px 10px',
-                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
-                      border: '2px solid white'
-                    }}>
-                      <div style={{ color: 'white', fontWeight: 'bold', fontSize: '13px', marginBottom: '2px' }}>
-                        📍 {selectedEvent.name}
-                      </div>
-                      <div style={{ color: 'rgba(255,255,255,0.9)', fontSize: '10px' }}>
-                        Zone: {selectedEvent.geoRadius || 100}m • {supervisorsWithAgents.reduce((sum, s) => sum + s.agents.length, 0)} agents
-                      </div>
-                    </div>
-                  </Tooltip>
-                  <Popup maxWidth={350}>
-                    <div className="p-4" style={{ minWidth: '300px' }}>
-                      {/* Header avec gradient */}
-                      <div className="relative mb-4 p-4 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 text-white -m-4 mb-4">
-                        <div className="flex items-center gap-3 mb-2">
-                          <div className="w-12 h-12 bg-white bg-opacity-20 rounded-full flex items-center justify-center backdrop-blur-sm">
-                            <span className="text-2xl">📍</span>
-                          </div>
-                          <div className="flex-1">
-                            <h3 className="font-bold text-xl">{selectedEvent.name}</h3>
-                            <p className="text-blue-100 text-sm font-medium">Zone de sécurité active</p>
-                          </div>
-                          <div className="text-right">
-                            <div className={`px-3 py-1 rounded-full text-xs font-bold ${
-                              selectedEvent.status === 'active' ? 'bg-green-400 text-green-900' :
-                              selectedEvent.status === 'pending' ? 'bg-yellow-400 text-yellow-900' :
-                              'bg-red-400 text-red-900'
-                            }`}>
-                              {selectedEvent.status === 'active' ? '🟢 EN COURS' :
-                               selectedEvent.status === 'pending' ? '🟡 EN ATTENTE' :
-                               '🔴 TERMINÉ'}
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                      
-                      {/* Stats Cards */}
-                      <div className="grid grid-cols-3 gap-2 mb-4">
-                        <div className="bg-green-50 border border-green-200 rounded-lg p-2 text-center">
-                          <div className="text-green-600 font-bold text-lg">{supervisorsWithAgents.reduce((sum, s) => sum + s.agents.length, 0)}</div>
-                          <div className="text-green-700 text-xs font-medium">👥 Agents</div>
-                        </div>
-                        <div className="bg-blue-50 border border-blue-200 rounded-lg p-2 text-center">
-                          <div className="text-blue-600 font-bold text-lg">{selectedEvent.geoRadius || 100}m</div>
-                          <div className="text-blue-700 text-xs font-medium">🔵 Zone</div>
-                        </div>
-                        <div className="bg-purple-50 border border-purple-200 rounded-lg p-2 text-center">
-                          <div className="text-purple-600 font-bold text-lg">{supervisorsWithAgents.length}</div>
-                          <div className="text-purple-700 text-xs font-medium">👔 Superviseurs</div>
-                        </div>
-                      </div>
+        </div>
 
-                      {/* Informations détaillées */}
-                      <div className="space-y-3">
-                        <div className="bg-gray-50 rounded-lg p-3">
-                          <div className="flex items-start gap-3">
-                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center flex-shrink-0 mt-0.5">
-                              <span className="text-blue-600 text-sm">📍</span>
-                            </div>
-                            <div className="flex-1">
-                              <div className="font-semibold text-gray-900 text-sm mb-1">Localisation</div>
-                              <div className="text-gray-600 text-xs leading-relaxed">{selectedEvent.location || 'Non définie'}</div>
-                            </div>
+        {/* Map Container */}
+        <div className="flex-1 relative">
+          {/* Floating Sidebar Toggle (Mobile) */}
+          {!showSidebar && (
+            <button
+              onClick={() => setShowSidebar(true)}
+              className="absolute top-4 left-4 z-[1000] bg-gradient-to-r from-blue-600 to-purple-600 text-white p-3 rounded-full shadow-2xl md:hidden hover:scale-110 transition-transform"
+            >
+              <FiMenu size={22} />
+            </button>
+          )}
+
+          {/* Floating Action Buttons */}
+          <div className="absolute top-4 right-4 z-[1000] flex flex-col gap-2">
+            {/* Refresh */}
+            <button
+              onClick={() => {
+                socketRef.current?.emit('tracking:subscribe', selectedEvent?.id);
+                toast.info('🔄 Actualisation...');
+              }}
+              className="bg-white p-3 rounded-full shadow-lg hover:bg-gray-50 transition-all hover:scale-110"
+            >
+              <FiRefreshCw size={20} className="text-gray-700" />
+            </button>
+            
+            {/* Center */}
+            <button
+              onClick={() => setAutoCenter(!autoCenter)}
+              className={`p-3 rounded-full shadow-lg transition-all hover:scale-110 ${
+                autoCenter ? 'bg-blue-600 text-white' : 'bg-white text-gray-700 hover:bg-gray-50'
+              }`}
+            >
+              <FiNavigation size={20} />
+            </button>
+          </div>
+
+          {/* Map */}
+          {loading ? (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-purple-50">
+              <div className="text-center">
+                <div className="relative">
+                  <div className="animate-spin rounded-full h-20 w-20 border-b-4 border-blue-600 mx-auto mb-4"></div>
+                  <FiMapPin className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 text-blue-600" size={32} />
+                </div>
+                <p className="text-gray-700 font-medium">Chargement de la carte...</p>
+                <p className="text-sm text-gray-500 mt-1">Initialisation GPS</p>
+              </div>
+            </div>
+          ) : (
+            <MapContainer
+              center={mapCenter}
+              zoom={13}
+              className="w-full h-full"
+              zoomControl={true}
+              ref={mapRef}
+            >
+              <RecenterMap center={mapCenter} />
+              
+              <TileLayer
+                attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+                url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+              />
+
+              {/* Event Location + Zone */}
+              {selectedEvent?.latitude && selectedEvent?.longitude && (
+                <>
+                  <Circle
+                    center={[selectedEvent.latitude, selectedEvent.longitude]}
+                    radius={selectedEvent.geoRadius || 100}
+                    pathOptions={{
+                      color: '#3B82F6',
+                      fillColor: '#3B82F6',
+                      fillOpacity: 0.15,
+                      weight: 2,
+                      dashArray: '5, 5'
+                    }}
+                  />
+                  <Marker position={[selectedEvent.latitude, selectedEvent.longitude]}>
+                    <Popup>
+                      <div className="text-center p-1">
+                        <p className="font-bold text-blue-600 mb-1">📍 {selectedEvent.name}</p>
+                        <p className="text-xs text-gray-600">{selectedEvent.location}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                          Zone: {selectedEvent.geoRadius || 100}m
+                        </p>
+                      </div>
+                    </Popup>
+                  </Marker>
+                </>
+              )}
+
+              {/* Agents Markers */}
+              {filteredAgents.map(agent => (
+                agent.latitude && agent.longitude && (
+                  <Marker
+                    key={agent.userId}
+                    position={[agent.latitude, agent.longitude]}
+                    icon={createAgentIcon(
+                      agent.isMoving,
+                      agent.batteryLevel || 100,
+                      agent.user?.role
+                    )}
+                  >
+                    <Popup>
+                      <div className="min-w-[220px] p-2">
+                        <div className="flex items-center gap-3 mb-3 pb-2 border-b">
+                          <span className={`text-3xl ${
+                            agent.isMoving ? 'animate-pulse' : ''
+                          }`}>
+                            {agent.user?.role === 'supervisor' ? '👔' : '👤'}
+                          </span>
+                          <div>
+                            <p className="font-bold text-gray-900">
+                              {agent.user?.firstName} {agent.user?.lastName}
+                            </p>
+                            <p className="text-xs text-gray-600 bg-gray-100 px-2 py-0.5 rounded inline-block mt-0.5">
+                              {agent.user?.cin}
+                            </p>
                           </div>
                         </div>
                         
-                        <div className="flex gap-3">
-                          <div className="flex-1 bg-gray-50 rounded-lg p-3">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-orange-500">📅</span>
-                              <div className="font-semibold text-gray-900 text-sm">Période</div>
-                            </div>
-                            <div className="text-gray-600 text-xs">
-                              {new Date(selectedEvent.startDate).toLocaleDateString('fr-FR', { 
-                                day: '2-digit', 
-                                month: 'short',
-                                year: 'numeric'
-                              })} - {new Date(selectedEvent.endDate).toLocaleDateString('fr-FR', { 
-                                day: '2-digit', 
-                                month: 'short' 
-                              })}
-                            </div>
-                          </div>
-                          
-                          <div className="flex-1 bg-gray-50 rounded-lg p-3">
-                            <div className="flex items-center gap-2 mb-1">
-                              <span className="text-red-500">🕐</span>
-                              <div className="font-semibold text-gray-900 text-sm">Actif depuis</div>
-                            </div>
-                            <div className={`text-sm font-mono font-bold ${
-                              getElapsedTime(selectedEvent.startDate).includes('h') ? 'text-red-600' :
-                              getElapsedTime(selectedEvent.startDate).includes('m') && parseInt(getElapsedTime(selectedEvent.startDate)) > 30 ? 'text-orange-600' :
-                              'text-green-600'
-                            }`}>
-                              {getElapsedTime(selectedEvent.startDate)}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Barre d'activité */}
-                        <div className="bg-gradient-to-r from-green-50 to-blue-50 rounded-lg p-3 border border-gray-200">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="font-semibold text-gray-900 text-sm">📊 Activité en temps réel</div>
-                            <div className="flex items-center gap-1">
-                              <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                              <span className="text-xs text-green-600 font-medium">Live</span>
-                            </div>
-                          </div>
-                          <div className="flex items-center gap-4 text-xs">
-                            <div className="flex items-center gap-1">
-                              <div className="w-3 h-3 bg-green-500 rounded-full"></div>
-                              <span className="text-green-700 font-medium">Actifs</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <div className="w-3 h-3 bg-orange-500 rounded-full"></div>
-                              <span className="text-orange-700 font-medium">En pause</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <div className="w-3 h-3 bg-red-500 rounded-full"></div>
-                              <span className="text-red-700 font-medium">Batterie faible</span>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  </Popup>
-                </Marker>
-              </>
-            )}
-            
-            {/* Afficher les responsables */}
-            {Array.from(supervisors.entries()).map(([userId, supervisor]) => {
-              // Calculer offset si plusieurs personnes au même endroit
-              const offset = calculateMarkerOffset([supervisor.latitude, supervisor.longitude], 'supervisor-' + userId);
-              const adjustedLat = supervisor.latitude + offset.lat;
-              const adjustedLng = supervisor.longitude + offset.lng;
-              
-              return (
-                <Marker
-                  key={'supervisor-' + userId}
-                  position={[adjustedLat, adjustedLng]}
-                  icon={createAgentIcon(supervisor.isMoving, supervisor.batteryLevel, 'supervisor', 'supervisor')}
-                >
-                  <Tooltip direction="top" offset={[0, -15]} opacity={0.95}>
-                    <div style={{ 
-                      padding: '8px 12px',
-                      background: 'linear-gradient(135deg, #8B5CF6 0%, #6366F1 100%)',
-                      borderRadius: '8px',
-                      boxShadow: '0 4px 6px rgba(0,0,0,0.15)',
-                      border: '2px solid white',
-                      minWidth: '180px'
-                    }}>
-                      <div style={{ color: 'white', fontWeight: 'bold', fontSize: '13px', marginBottom: '4px', textAlign: 'center' }}>
-                        👔 Responsable
-                      </div>
-                      <div style={{ color: 'rgba(255,255,255,0.95)', fontSize: '11px', display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-                        <span>{supervisor.isMoving ? '🏃 En mouvement' : '🛑 À l\'arrêt'}</span>
-                        <span>🔋 {supervisor.batteryLevel}%</span>
-                      </div>
-                      <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: '10px', textAlign: 'center', marginTop: '4px', paddingTop: '4px', borderTop: '1px solid rgba(255,255,255,0.3)' }}>
-                        🕐 Il y a {getElapsedTime(supervisor.timestamp)}
-                      </div>
-                    </div>
-                  </Tooltip>
-                  <Popup maxWidth={320}>
-                    <div className="p-3" style={{ minWidth: '280px' }}>
-                      <div className="border-b border-purple-200 pb-2 mb-3">
-                        <div className="flex items-center gap-2 mb-1">
-                          <div className="w-10 h-10 bg-purple-100 rounded-full flex items-center justify-center">
-                            <span className="text-2xl">👔</span>
-                          </div>
-                          <div className="flex-1">
-                            <h3 className="font-bold text-base text-gray-900">Responsable</h3>
-                            <p className="text-xs text-purple-600 font-medium">CIN: {userId}</p>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="space-y-2.5">
-                        <div className="bg-gray-50 rounded-lg p-2">
-                          <div className="flex items-center gap-2 mb-1">
-                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${supervisor.isMoving ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                              {supervisor.isMoving ? '🏃 En déplacement' : '🛑 Stationnaire'}
+                        <div className="space-y-2 text-sm">
+                          <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                            <span className="text-gray-600 flex items-center gap-1">
+                              <FiActivity size={14} />
+                              Status
+                            </span>
+                            <span className={`font-semibold ${agent.isMoving ? 'text-green-600' : 'text-orange-600'}`}>
+                              {agent.isMoving ? '🏃 En mouvement' : '⏸️ Arrêté'}
                             </span>
                           </div>
-                        </div>
-                        <div className="flex items-start gap-2 text-sm">
-                          <span className="text-purple-600 font-semibold min-w-[70px]">📍 GPS:</span>
-                          <span className="text-gray-600 text-xs font-mono">{supervisor.latitude?.toFixed(6)}, {supervisor.longitude?.toFixed(6)}</span>
-                        </div>
-                        <div className="flex items-start gap-2 text-sm">
-                          <span className="text-purple-600 font-semibold min-w-[70px]">📡 Précision:</span>
-                          <span className="text-gray-700">±{supervisor.accuracy?.toFixed(0)} mètres</span>
-                        </div>
-                        <div className="flex items-start gap-2 text-sm">
-                          <span className="text-purple-600 font-semibold min-w-[70px]">🔋 Batterie:</span>
-                          <div className="flex items-center gap-2">
-                            <div className="flex-1 bg-gray-200 rounded-full h-2 w-20">
-                              <div className={`h-2 rounded-full ${supervisor.batteryLevel > 50 ? 'bg-green-500' : supervisor.batteryLevel > 20 ? 'bg-orange-500' : 'bg-red-500'}`} style={{ width: `${supervisor.batteryLevel}%` }}></div>
+                          
+                          {agent.speed !== undefined && (
+                            <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                              <span className="text-gray-600 flex items-center gap-1">
+                                <FiZap size={14} />
+                                Vitesse
+                              </span>
+                              <span className="font-semibold">{(agent.speed * 3.6).toFixed(1)} km/h</span>
                             </div>
-                            <span className="text-gray-700 font-semibold">{supervisor.batteryLevel}%</span>
-                          </div>
-                        </div>
-                        <div className="flex items-start gap-2 text-sm">
-                          <span className="text-purple-600 font-semibold min-w-[70px]">🕐 Dernière:</span>
-                          <span className="text-gray-700">{new Date(supervisor.timestamp).toLocaleTimeString('fr-FR')}</span>
-                        </div>
-                      </div>
-                    </div>
-                  </Popup>
-                </Marker>
-              );
-            })}
-            
-            {/* Afficher les agents */}
-            {Array.from(agents.entries()).map(([userId, agent]) => {
-              const trail = trails.get(userId) || [];
-              // Calculer offset si plusieurs personnes au même endroit
-              const offset = calculateMarkerOffset([agent.latitude, agent.longitude], userId);
-              const adjustedLat = agent.latitude + offset.lat;
-              const adjustedLng = agent.longitude + offset.lng;
-              
-              return (
-                <React.Fragment key={userId}>
-                  {/* Traînée */}
-                  {trail.length > 0 && (
-                    <Polyline 
-                      positions={[...trail, [agent.latitude, agent.longitude]]}
-                      pathOptions={{ color: agent.isMoving ? '#10B981' : '#F59E0B', weight: 2, opacity: 0.6 }}
-                    />
-                  )}
-                  
-                  {/* Marqueur agent */}
-                  <Marker
-                    position={[adjustedLat, adjustedLng]}
-                    icon={createAgentIcon(agent.isMoving, agent.batteryLevel, agent.role, 'agent')}
-                  >
-                    <Tooltip direction="top" offset={[0, -15]} opacity={0.95}>
-                      <div style={{ 
-                        padding: '8px 12px',
-                        background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
-                        borderRadius: '8px',
-                        boxShadow: '0 4px 6px rgba(0,0,0,0.15)',
-                        border: '2px solid white',
-                        minWidth: '200px'
-                      }}>
-                        <div style={{ color: 'white', fontWeight: 'bold', fontSize: '13px', marginBottom: '4px', textAlign: 'center' }}>
-                          {agent.isConnected ? '🟢' : '🔴'} 👮 {agent.firstName} {agent.lastName}
-                        </div>
-                        <div style={{ color: 'rgba(255,255,255,0.95)', fontSize: '11px', display: 'flex', justifyContent: 'space-between', marginBottom: '2px' }}>
-                          <span>{agent.isMoving ? '🏃 En mouvement' : '🛑 À l\'arrêt'}</span>
-                          <span>🔋 {agent.batteryLevel !== null && agent.batteryLevel !== undefined ? agent.batteryLevel : 100}%</span>
-                        </div>
-                        <div style={{ color: 'rgba(255,255,255,0.85)', fontSize: '10px', textAlign: 'center', marginTop: '4px', paddingTop: '4px', borderTop: '1px solid rgba(255,255,255,0.3)' }}>
-                          🕐 Il y a {getElapsedTime(agent.timestamp)}
-                        </div>
-                      </div>
-                    </Tooltip>
-                    <Popup maxWidth={320}>
-                      <div className="p-3" style={{ minWidth: '280px' }}>
-                        <div className="border-b border-blue-200 pb-2 mb-3">
-                          <div className="flex items-center gap-2 mb-1">
-                            <div className="w-10 h-10 bg-blue-100 rounded-full flex items-center justify-center">
-                              <span className="text-2xl">👮</span>
-                            </div>
-                            <div className="flex-1">
-                              <h3 className="font-bold text-base text-gray-900">{agent.firstName} {agent.lastName}</h3>
-                              <p className="text-xs text-blue-600 font-medium">{agent.employeeId || agent.role}</p>
-                            </div>
-                          </div>
-                        </div>
-                        <div className="space-y-2.5">
-                          <div className="bg-gray-50 rounded-lg p-2">
-                            <div className="flex items-center gap-2">
-                              <span className={`px-2 py-1 rounded-full text-xs font-semibold ${agent.isMoving ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
-                                {agent.isMoving ? '🏃 En déplacement' : '🛑 Stationnaire'}
+                          )}
+                          
+                          {agent.batteryLevel && (
+                            <div className="flex items-center justify-between p-2 bg-gray-50 rounded">
+                              <span className="text-gray-600 flex items-center gap-1">
+                                <FiBattery size={14} />
+                                Batterie
+                              </span>
+                              <span className={`font-semibold ${agent.batteryLevel < 20 ? 'text-red-600' : 'text-green-600'}`}>
+                                {agent.batteryLevel}%
                               </span>
                             </div>
-                          </div>
-                          <div className="flex items-start gap-2 text-sm">
-                            <span className="text-blue-600 font-semibold min-w-[70px]">📍 GPS:</span>
-                            <span className="text-gray-600 text-xs font-mono">{agent.latitude?.toFixed(6)}, {agent.longitude?.toFixed(6)}</span>
-                          </div>
-                          <div className="flex items-start gap-2 text-sm">
-                            <span className="text-blue-600 font-semibold min-w-[70px]">📡 Précision:</span>
-                            <span className="text-gray-700">±{agent.accuracy?.toFixed(0)} mètres</span>
-                          </div>
-                          {agent.batteryLevel && (
-                          <div className="flex items-start gap-2 text-sm">
-                            <span className="text-blue-600 font-semibold min-w-[70px]">🔋 Batterie:</span>
-                            <div className="flex items-center gap-2">
-                              <div className="flex-1 bg-gray-200 rounded-full h-2 w-20">
-                                <div className={`h-2 rounded-full ${agent.batteryLevel > 50 ? 'bg-green-500' : agent.batteryLevel > 20 ? 'bg-orange-500' : 'bg-red-500'}`} style={{ width: `${agent.batteryLevel}%` }}></div>
-                              </div>
-                              <span className="text-gray-700 font-semibold">{agent.batteryLevel}%</span>
-                            </div>
-                          </div>
                           )}
-                          <div className="flex items-start gap-2 text-sm">
-                            <span className="text-blue-600 font-semibold min-w-[70px]">🕐 Dernière:</span>
-                            <span className="text-gray-700">{new Date(agent.timestamp).toLocaleTimeString('fr-FR')}</span>
+                          
+                          <div className="flex items-center justify-between p-2 bg-blue-50 rounded">
+                            <span className="text-gray-600 flex items-center gap-1">
+                              <FiClock size={14} />
+                              Dernière MAJ
+                            </span>
+                            <span className="font-semibold text-blue-700 text-xs">
+                              {new Date(agent.lastUpdate).toLocaleTimeString('fr-FR')}
+                            </span>
                           </div>
-                          {trail.length > 0 && (
-                          <div className="flex items-start gap-2 text-sm">
-                            <span className="text-blue-600 font-semibold min-w-[70px]">📏 Trajet:</span>
-                            <span className="text-gray-700">{trail.length} point{trail.length > 1 ? 's' : ''}</span>
-                          </div>
-                          )}
                         </div>
                       </div>
                     </Popup>
                   </Marker>
-                </React.Fragment>
-              );
-            })()}
-          </MapContainer>
-
-          {/* Légende */}
-          <div className="absolute bottom-4 left-4 bg-white rounded-lg shadow-lg p-4 z-[1000]">
-            <h3 className="font-semibold text-gray-900 mb-2">Légende</h3>
-            <div className="space-y-2 text-sm">
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-green-500"></div>
-                <span>En mouvement</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-orange-500"></div>
-                <span>À l'arrêt</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-4 h-4 rounded-full bg-red-500"></div>
-                <span>Batterie faible (&lt;20%)</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg">👤</span>
-                <span>Agent</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg">👔</span>
-                <span>Responsable</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-lg">📍</span>
-                <span>Zone événement</span>
-              </div>
-            </div>
-          </div>
-          
-          {/* Bouton toggle sidebar */}
-          <button
-            onClick={() => setShowSidebar(!showSidebar)}
-            className="absolute top-4 left-4 bg-white rounded-lg shadow-lg p-3 z-[1000] hover:bg-gray-50"
-          >
-            <FiUsers className="text-xl text-gray-700" />
-          </button>
+                )
+              ))}
+            </MapContainer>
+          )}
         </div>
       </div>
     </div>
