@@ -284,7 +284,7 @@ const RealTimeTracking = () => {
 
   const loadEvents = async () => {
     try {
-      const response = await api.get('/api/events', {
+      const response = await api.get('/events', {
         params: { status: 'active,scheduled' }
       });
       const evts = response.data.data || [];
