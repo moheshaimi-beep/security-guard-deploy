@@ -287,12 +287,33 @@ const RealTimeTracking = () => {
       const response = await api.get('/events', {
         params: { status: 'active,scheduled' }
       });
-      const evts = response.data.data || [];
-      setEvents(evts);
+      const allEvents = response.data.data || [];
       
-      const activeEvent = evts.find(e => e.status === 'active');
-      if (activeEvent) {
-        setSelectedEvent(activeEvent);
+      // Filtrer : événements actifs OU qui commencent dans moins de 2h
+      const now = new Date();
+      const twoHoursFromNow = new Date(now.getTime() + (2 * 60 * 60 * 1000));
+      
+      const relevantEvents = allEvents.filter(event => {
+        // Garder tous les événements actifs
+        if (event.status === 'active') return true;
+        
+        // Pour les événements schedulés, garder seulement ceux qui commencent dans moins de 2h
+        if (event.status === 'scheduled') {
+          const eventStart = new Date(event.startDate);
+          return eventStart <= twoHoursFromNow;
+        }
+        
+        return false;
+      });
+      
+      setEvents(relevantEvents);
+      
+      // Sélectionner automatiquement le premier événement actif, sinon le premier de la liste
+      const activeEvent = relevantEvents.find(e => e.status === 'active');
+      const defaultEvent = activeEvent || relevantEvents[0];
+      
+      if (defaultEvent) {
+        setSelectedEvent(defaultEvent);
       }
     } catch (error) {
       console.error('Erreur chargement événements:', error);
