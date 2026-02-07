@@ -203,6 +203,8 @@ exports.login = async (req, res) => {
 exports.loginByCin = async (req, res) => {
   try {
     const { cin, userType } = req.body; // userType: 'agent' ou 'supervisor'
+    const { isCheckInAllowed, getEventTimeStatus } = require('../utils/eventTimeWindows');
+    const { Assignment, Event } = require('../models');
 
     if (!cin || !cin.trim()) {
       await logActivity({
@@ -317,6 +319,136 @@ exports.loginByCin = async (req, res) => {
       });
     }
 
+    // ✅ VÉRIFICATION DES FENÊTRES DE TEMPS POUR LES ÉVÉNEMENTS
+    // Récupérer les affectations confirmées de l'utilisateur
+    const assignments = await Assignment.findAll({
+      where: {
+        agentId: user.id,
+        status: 'confirmed'
+      },
+      include: [{
+        model: Event,
+        as: 'event',
+        required: true
+      }]
+    });
+
+    if (assignments.length === 0) {
+      await logActivity({
+        userId: user.id,
+        action: 'LOGIN_BY_CIN_FAILED',
+        entityType: 'auth',
+        entityId: user.id,
+        description: 'Connexion CIN refusée - aucune affectation confirmée',
+        req,
+        status: 'failure',
+        errorMessage: 'Aucune affectation'
+      });
+
+      return res.status(403).json({
+        success: false,
+        message: 'Vous n\'avez aucune affectation confirmée.',
+        code: 'NO_ASSIGNMENTS'
+      });
+    }
+
+    // Vérifier si au moins un événement est dans la fenêtre de temps autorisée
+    const now = new Date();
+    const validEvents = [];
+    const allEventStatuses = [];
+
+    for (const assignment of assignments) {
+      const event = assignment.event;
+      const timeStatus = getEventTimeStatus(event);
+      
+      allEventStatuses.push({
+        eventName: event.name,
+        startDate: event.startDate,
+        endDate: event.endDate,
+        timeStatus
+      });
+
+      // L'événement est accessible si on peut faire le check-in (2h avant → fin)
+      if (timeStatus.canCheckIn) {
+        validEvents.push({
+          event,
+          timeStatus
+        });
+      }
+    }
+
+    if (validEvents.length === 0) {
+      // Aucun événement dans la fenêtre de temps autorisée
+      // Préparer un message détaillé
+      const nextEvent = allEventStatuses
+        .filter(e => e.timeStatus.isBeforeWindow)
+        .sort((a, b) => new Date(a.startDate) - new Date(b.startDate))[0];
+
+      const pastEvent = allEventStatuses
+        .filter(e => e.timeStatus.isAfterEvent)
+        .sort((a, b) => new Date(b.endDate) - new Date(a.endDate))[0];
+
+      let detailedMessage = '';
+      let nextEventInfo = null;
+
+      if (nextEvent) {
+        const eventStart = new Date(nextEvent.startDate);
+        const twoHoursBefore = new Date(eventStart.getTime() - 2 * 60 * 60 * 1000);
+        const timeDiff = twoHoursBefore - now;
+        const hoursDiff = Math.floor(timeDiff / (1000 * 60 * 60));
+        const minutesDiff = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
+
+        nextEventInfo = {
+          eventName: nextEvent.eventName,
+          startDate: nextEvent.startDate,
+          accessibleAt: twoHoursBefore,
+          hoursRemaining: hoursDiff,
+          minutesRemaining: minutesDiff
+        };
+
+        detailedMessage = `Le check-in pour l'événement "${nextEvent.eventName}" sera disponible 2 heures avant le début, soit à partir du ${twoHoursBefore.toLocaleString('fr-FR', { 
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })}. Il reste ${hoursDiff}h${minutesDiff}min.`;
+      } else if (pastEvent) {
+        detailedMessage = `L'événement "${pastEvent.eventName}" est terminé. Le check-in n'est plus disponible.`;
+      } else {
+        detailedMessage = 'Aucun événement n\'est actuellement accessible pour le check-in.';
+      }
+
+      await logActivity({
+        userId: user.id,
+        action: 'LOGIN_BY_CIN_FAILED',
+        entityType: 'auth',
+        entityId: user.id,
+        description: `Connexion CIN refusée - Hors fenêtre de temps: ${detailedMessage}`,
+        req,
+        status: 'failure',
+        errorMessage: 'Hors fenêtre de temps'
+      });
+
+      return res.status(403).json({
+        success: false,
+        message: detailedMessage,
+        code: 'OUTSIDE_TIME_WINDOW',
+        data: {
+          nextEvent: nextEventInfo,
+          allEvents: allEventStatuses.map(e => ({
+            name: e.eventName,
+            start: e.startDate,
+            end: e.endDate,
+            canCheckIn: e.timeStatus.canCheckIn,
+            isBeforeWindow: e.timeStatus.isBeforeWindow,
+            isAfterEvent: e.timeStatus.isAfterEvent
+          }))
+        }
+      });
+    }
+
+    // ✅ Connexion autorisée - Générer les tokens
     const { accessToken, refreshToken } = generateTokens(user);
     // Generate special checkInToken for mobile/agent checkin
     const checkInToken = jwt.sign(
@@ -334,7 +466,7 @@ exports.loginByCin = async (req, res) => {
       action: 'LOGIN_BY_CIN',
       entityType: 'user',
       entityId: user.id,
-      description: `Connexion par CIN réussie`,
+      description: `Connexion par CIN réussie - ${validEvents.length} événement(s) accessible(s)`,
       req
     });
 
@@ -345,7 +477,17 @@ exports.loginByCin = async (req, res) => {
         user: user.toJSON(),
         accessToken,
         refreshToken,
-        checkInToken
+        checkInToken,
+        validEvents: validEvents.map(ve => ({
+          eventId: ve.event.id,
+          eventName: ve.event.name,
+          startDate: ve.event.startDate,
+          endDate: ve.event.endDate,
+          canCheckIn: ve.timeStatus.canCheckIn,
+          canCheckOut: ve.timeStatus.canCheckOut,
+          isDuringEvent: ve.timeStatus.isDuringEvent,
+          isInPreWindow: ve.timeStatus.isInPreWindow
+        }))
       }
     });
   } catch (error) {

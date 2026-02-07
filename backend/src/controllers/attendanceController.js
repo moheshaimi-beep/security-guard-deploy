@@ -189,15 +189,42 @@ exports.checkIn = async (req, res) => {
       });
     }
 
-    // Check if event is active today
-    const eventStart = new Date(event.startDate);
-    const eventEnd = new Date(event.endDate);
-    const todayDate = new Date(today);
+    // ✅ VÉRIFICATION STRICTE DES FENÊTRES DE TEMPS
+    const { isCheckInAllowed, getEventTimeStatus } = require('../utils/eventTimeWindows');
+    const timeStatus = getEventTimeStatus(event);
 
-    if (todayDate < eventStart || todayDate > eventEnd) {
-      return res.status(400).json({
+    // Vérifier si le check-in est autorisé (2h avant → fin de l'événement)
+    if (!timeStatus.canCheckIn) {
+      let detailedMessage = '';
+      
+      if (timeStatus.isBeforeWindow) {
+        const eventStart = new Date(event.startDate);
+        const twoHoursBefore = new Date(eventStart.getTime() - 2 * 60 * 60 * 1000);
+        detailedMessage = `Le check-in sera disponible 2 heures avant le début de l'événement, à partir du ${twoHoursBefore.toLocaleString('fr-FR', {
+          day: '2-digit',
+          month: '2-digit',
+          year: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit'
+        })}.`;
+      } else if (timeStatus.isAfterEvent) {
+        detailedMessage = 'L\'événement est terminé. Le check-in n\'est plus disponible.';
+      } else {
+        detailedMessage = 'Le check-in n\'est pas disponible pour le moment.';
+      }
+
+      return res.status(403).json({
         success: false,
-        message: 'L\'événement n\'est pas actif aujourd\'hui'
+        message: detailedMessage,
+        code: 'CHECKIN_NOT_ALLOWED',
+        data: {
+          timeStatus,
+          event: {
+            name: event.name,
+            startDate: event.startDate,
+            endDate: event.endDate
+          }
+        }
       });
     }
 
@@ -398,6 +425,7 @@ exports.checkOut = async (req, res) => {
       checkOutMethod = 'facial',
       notes
     } = req.body;
+    const { isCheckOutAllowed, getEventTimeStatus } = require('../utils/eventTimeWindows');
 
     const agentId = req.user.id;
     const attendanceId = req.params.id;
@@ -425,6 +453,47 @@ exports.checkOut = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'Vous avez déjà pointé votre sortie'
+      });
+    }
+
+    // ✅ VÉRIFICATION STRICTE: Check-out autorisé seulement 5 min avant la fin
+    const event = attendance.event;
+    if (!event) {
+      return res.status(404).json({
+        success: false,
+        message: 'Événement non trouvé'
+      });
+    }
+
+    const timeStatus = getEventTimeStatus(event);
+
+    if (!timeStatus.canCheckOut) {
+      let detailedMessage = '';
+      
+      if (!timeStatus.isNearEnd && timeStatus.isDuringEvent) {
+        const eventEnd = new Date(event.endDate);
+        const fiveMinBefore = new Date(eventEnd.getTime() - 5 * 60 * 1000);
+        detailedMessage = `Le check-out sera disponible 5 minutes avant la fin de l'événement, à partir de ${fiveMinBefore.toLocaleTimeString('fr-FR', {
+          hour: '2-digit',
+          minute: '2-digit'
+        })}.`;
+      } else if (timeStatus.isAfterEvent) {
+        detailedMessage = 'L\'événement est terminé. Le check-out n\'est plus disponible.';
+      } else {
+        detailedMessage = 'Le check-out n\'est pas encore disponible.';
+      }
+
+      return res.status(403).json({
+        success: false,
+        message: detailedMessage,
+        code: 'CHECKOUT_NOT_ALLOWED',
+        data: {
+          timeStatus,
+          event: {
+            name: event.name,
+            endDate: event.endDate
+          }
+        }
       });
     }
 

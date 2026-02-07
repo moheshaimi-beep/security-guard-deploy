@@ -115,123 +115,72 @@ const CheckInLogin = () => {
       if (response.data.success) {
         const user = response.data.data.user;
         const checkInToken = response.data.data.checkInToken;
+        const validEvents = response.data.data.validEvents || [];
 
         console.log('👤 User from login:', {
           id: user?.id,
           firstName: user?.firstName,
           role: user?.role,
-          cin: user?.cin
+          cin: user?.cin,
+          validEventsCount: validEvents.length
         });
 
-        // ✅ Stocker les tokens ET les infos utilisateur AVANT d'appeler l'API
-        // (sinon l'intercepteur axios ne trouvera pas le token!)
+        // ✅ Stocker les tokens ET les infos utilisateur
         localStorage.setItem('checkInToken', checkInToken);
         localStorage.setItem('token', checkInToken);
         localStorage.setItem('accessToken', checkInToken);
         localStorage.setItem('checkInUser', JSON.stringify(user));
+        localStorage.setItem('validEvents', JSON.stringify(validEvents));
 
         // ✅ Mettre à jour le store Zustand pour authentifier l'utilisateur
         setAuthenticatedUser(user, checkInToken);
         
-        console.log('🔍 About to fetch assignments...');
-        
-        // Vérifier si l'utilisateur a des assignations confirmées pour aujourd'hui
-        try {
-          console.log('🔍 Fetching assignments with checkInToken:', checkInToken ? '✅' : '❌');
-          const assignmentsResponse = await assignmentsAPI.getMyAssignments({
-            status: 'confirmed',
-            today: true
-          });
-          console.log('📋 Assignments API Response:', assignmentsResponse.data);
-
-          const assignments = assignmentsResponse.data.data || [];
-          console.log('📊 Raw assignments count:', assignments.length);
-          
-          // Filtrer les assignations confirmées pour aujourd'hui ou qui commencent bientôt (2h)
-          const now = new Date();
-          const twoHoursLater = new Date(now.getTime() + 2 * 60 * 60 * 1000);
-          const today = now.toISOString().split('T')[0];
-          console.log('📅 Today filter:', today);
-          console.log('🕐 Now:', now.toISOString());
-          console.log('🕐 Two hours later:', twoHoursLater.toISOString());
-
-          const confirmedTodayAssignments = assignments.filter(a => {
-            console.log('🔍 Checking assignment:', {
-              id: a.id,
-              status: a.status,
-              hasEvent: !!a.event,
-              eventName: a.event?.name,
-              eventStartDate: a.event?.startDate
-            });
-            
-            if (!a.event?.startDate) {
-              console.log('❌ No event.startDate');
-              return false;
-            }
-
-            const eventDate = new Date(a.event.startDate);
-            const eventDateStr = eventDate.toISOString().split('T')[0];
-            
-            console.log('📅 Event date comparison:', {
-              eventDateStr,
-              today,
-              isToday: eventDateStr === today,
-              eventDate: eventDate.toISOString(),
-              isInNext2Hours: eventDate >= now && eventDate <= twoHoursLater
-            });
-
-            // Vérifier si l'événement est aujourd'hui
-            if (eventDateStr === today) return true;
-
-            // Vérifier si l'événement commence dans les 2 prochaines heures
-            if (eventDate >= now && eventDate <= twoHoursLater) return true;
-
-            return false;
-          });
-          
-          console.log('✅ Filtered assignments:', confirmedTodayAssignments.length);
-
-          if (confirmedTodayAssignments.length === 0) {
-            // Pas d'événement confirmé pour aujourd'hui ou dans les 2h
-            localStorage.removeItem('checkInToken');
-            localStorage.removeItem('checkInUser');
-            localStorage.removeItem('token');
-            setError("Vous n'êtes pas affecté à un événement aujourd'hui ou dans les 2 prochaines heures.");
-            setLoading(false);
-            return;
-          }
-
-          toast.success('Connexion réussie! Procédez au pointage.');
-          // ✅ Redirection vers /checkin pour agents/superviseurs
-          navigate('/checkin');
-        } catch (assignmentErr) {
-          console.error('❌ ERROR fetching assignments:', {
-            status: assignmentErr.response?.status,
-            data: assignmentErr.response?.data,
-            message: assignmentErr.message,
-            fullError: assignmentErr
-          });
-          // Erreur lors de la vérification des assignations
-          localStorage.removeItem('checkInToken');
-          localStorage.removeItem('checkInUser');
-          localStorage.removeItem('token');
-          localStorage.removeItem('accessToken');
-          setError(`Erreur lors de la vérification des affectations: ${assignmentErr.response?.data?.message || assignmentErr.message}. Veuillez réessayer.`);
-          setLoading(false);
-        }
+        toast.success(`Connexion réussie! ${validEvents.length} événement(s) disponible(s).`);
+        // ✅ Redirection vers /checkin pour agents/superviseurs
+        navigate('/checkin');
       }
     } catch (err) {
       console.error('❌ CIN Login Error:', {
         status: err.response?.status,
         data: err.response?.data,
         message: err.message,
+        code: err.response?.data?.code,
         fullError: err
       });
+
+      // ✅ GESTION DES CODES D'ERREUR SPÉCIFIQUES
+      const errorCode = err.response?.data?.code;
+      const errorData = err.response?.data?.data;
       const message = err.response?.data?.message || 'Erreur de connexion';
+
+      // Afficher le message d'erreur détaillé
       setError(message);
 
-      if (err.response?.data?.code === 'NO_FACIAL_VECTOR') {
-        toast.error('Reconnaissance faciale non configurée. Contactez l\'administrateur.');
+      // Affichage de toasts selon le type d'erreur
+      if (errorCode === 'OUTSIDE_TIME_WINDOW') {
+        // Fenêtre de temps non autorisée
+        toast.error(message, {
+          autoClose: 8000,
+          style: { whiteSpace: 'pre-line' }
+        });
+
+        // Afficher les détails des événements si disponibles
+        if (errorData?.nextEvent) {
+          const nextEvent = errorData.nextEvent;
+          console.log('📅 Prochain événement:', nextEvent);
+        }
+      } else if (errorCode === 'NO_ASSIGNMENTS') {
+        toast.error('Vous n\'avez aucune affectation confirmée.', {
+          autoClose: 5000
+        });
+      } else if (errorCode === 'NO_FACIAL_VECTOR') {
+        toast.error('Reconnaissance faciale non configurée. Contactez l\'administrateur.', {
+          autoClose: 5000
+        });
+      } else {
+        toast.error(message, {
+          autoClose: 5000
+        });
       }
     } finally {
       setLoading(false);

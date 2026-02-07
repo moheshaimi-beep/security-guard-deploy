@@ -423,7 +423,8 @@ const startServer = async () => {
       // Initialize default permissions if none exist
       await initializeDefaultPermissions();
       
-      // Start scheduler for automatic tasks
+      // Start scheduler for automatic tasks (will be updated with io instance later)
+      // Note: io instance will be passed after server starts listening
       startScheduler();
       
       // Initialize scheduled backup service
@@ -451,6 +452,10 @@ const startServer = async () => {
       // ✅ Initialize Socket.IO Service AFTER server listening
       socketIOService.initialize(io);
       console.log('✅ Socket.IO Service initialized');
+      
+      // ✅ Redémarrer le scheduler avec l'instance Socket.IO pour la vérification des fenêtres de temps
+      startScheduler(io);
+      console.log('✅ Scheduler mis à jour avec Socket.IO pour la gestion automatique des fenêtres de temps');
     });
   } catch (error) {
     console.error('❌ Unable to start server:', error);

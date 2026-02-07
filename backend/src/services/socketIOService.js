@@ -170,25 +170,41 @@ class SocketIOService {
           return;
         }
         
-        // Vérifier si le tracking est autorisé pour cet événement
+        // Vérifier si le tracking est autorisé pour cet événement (2h avant → fin)
         if (!isTrackingAllowed(event)) {
           const timeStatus = getEventTimeStatus(event);
           
           let reason = 'Tracking non autorisé';
+          let detailedMessage = '';
+          
           if (timeStatus.isBeforeWindow) {
-            reason = 'Le tracking démarrera 2h avant le début de l\'événement';
+            const eventStart = new Date(event.startDate);
+            const twoHoursBefore = new Date(eventStart.getTime() - 2 * 60 * 60 * 1000);
+            reason = 'Tracking pas encore disponible';
+            detailedMessage = `Le tracking temps réel sera activé automatiquement 2 heures avant le début de l'événement "${event.name}", à partir de ${twoHoursBefore.toLocaleString('fr-FR', {
+              day: '2-digit',
+              month: '2-digit',
+              hour: '2-digit',
+              minute: '2-digit'
+            })}.`;
           } else if (timeStatus.isAfterEvent) {
-            reason = 'Événement terminé - Tracking désactivé';
+            reason = 'Événement terminé';
+            detailedMessage = `L'événement "${event.name}" est terminé. Le tracking temps réel est désactivé automatiquement.`;
           }
           
           socket.emit('tracking:disabled', { 
             message: reason,
+            detailedMessage,
             timeStatus,
             eventId: event.id,
-            eventName: event.name
+            eventName: event.name,
+            code: 'TRACKING_NOT_ALLOWED'
           });
           
-          console.log(`⏸️ Tracking refusé pour ${userId}: ${reason}`);
+          console.log(`⏸️ Tracking refusé pour ${userIdentifier || userId}: ${reason}`);
+          
+          // Supprimer la position de la mémoire
+          this.agentPositions.delete(userId);
           return;
         }
       }
