@@ -2,6 +2,15 @@
 <html lang="fr">
   <head>
     <meta charset="utf-8" />
+    
+    <!-- Viewport Responsive - Compatible Mobile/Tablet/Desktop -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, user-scalable=yes, viewport-fit=cover" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="SGM" />
+    <meta name="format-detection" content="telephone=no" />
+    
     <!-- Favicon et icônes d'application -->
     <link rel="icon" type="image/x-icon" href="%PUBLIC_URL%/favicon.ico" />
     <link rel="icon" type="image/svg+xml" href="%PUBLIC_URL%/favicon.svg" />
@@ -10,8 +19,12 @@
     <link rel="icon" type="image/svg+xml" sizes="16x16" href="%PUBLIC_URL%/favicon-16.svg" />
     <link rel="manifest" href="%PUBLIC_URL%/manifest.json" />
     
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!-- Theme colors -->
     <meta name="theme-color" content="#2563eb" />
+    <meta name="msapplication-TileColor" content="#2563eb" />
+    <meta name="msapplication-navbutton-color" content="#2563eb" />
+    
+    <!-- SEO -->
     <meta name="description" content="Security Guard Management - Dashboard de gestion des agents de sécurité" />
     <meta name="author" content="SGM Team" />
     <meta name="keywords" content="sécurité, agents, gestion, surveillance, événements, pointage" />
@@ -23,6 +36,9 @@
     <meta property="og:image" content="%PUBLIC_URL%/favicon-180.png" />
     
     <title>SGM Dashboard</title>
+    
+    <!-- Preconnect pour performances -->
+    <link rel="preconnect" href="https://security-guard-backend.onrender.com" />
   </head>
   <body>
     <noscript>Vous devez activer JavaScript pour utiliser cette application.</noscript>
