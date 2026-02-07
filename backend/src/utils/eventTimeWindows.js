@@ -3,7 +3,7 @@
  * 
  * Règles métier:
  * - Temps réel activé 2h avant le début jusqu'à la fin de l'événement
- * - Check-in autorisé 2h avant le début jusqu'à la fin
+ * - Check-in autorisé 2h avant le début jusqu'à (début + tolérance retard)
  * - Check-out autorisé 5 minutes avant la fin jusqu'à la fin
  */
 
@@ -42,13 +42,16 @@ const isCheckInAllowed = (event) => {
 
   const now = new Date();
   const start = new Date(event.startDate);
-  const end = new Date(event.endDate);
   
   // 2 heures avant le début
   const preWindowStart = new Date(start.getTime() - 2 * 60 * 60 * 1000);
   
-  // Check-in autorisé de 2h avant le début jusqu'à la fin
-  return now >= preWindowStart && now <= end;
+  // Tolérance de retard (par défaut 15 minutes si non définie)
+  const lateThreshold = event.lateThreshold || 15;
+  const checkInEnd = new Date(start.getTime() + lateThreshold * 60 * 1000);
+  
+  // Check-in autorisé de 2h avant le début jusqu'à (début + tolérance retard)
+  return now >= preWindowStart && now <= checkInEnd;
 };
 
 /**
@@ -97,12 +100,17 @@ const getEventTimeStatus = (event) => {
   // 2 heures avant le début
   const preWindowStart = new Date(start.getTime() - 2 * 60 * 60 * 1000);
   
+  // Tolérance de retard (par défaut 15 minutes si non définie)
+  const lateThreshold = event.lateThreshold || 15;
+  const checkInEnd = new Date(start.getTime() + lateThreshold * 60 * 1000);
+  
   // 5 minutes avant la fin
   const checkOutStart = new Date(end.getTime() - 5 * 60 * 1000);
 
   const isBeforeWindow = now < preWindowStart;
   const isInPreWindow = now >= preWindowStart && now < start;
   const isDuringEvent = now >= start && now <= end;
+  const isAfterCheckInWindow = now > checkInEnd;
   const isNearEnd = now >= checkOutStart && now <= end;
   const isAfterEvent = now > end;
 
@@ -110,6 +118,7 @@ const getEventTimeStatus = (event) => {
     isBeforeWindow,
     isInPreWindow,
     isDuringEvent,
+    isAfterCheckInWindow,
     isNearEnd,
     isAfterEvent,
     canCheckIn: isCheckInAllowed(event),

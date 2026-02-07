@@ -194,20 +194,26 @@ exports.checkIn = async (req, res) => {
     const { isCheckInAllowed, getEventTimeStatus } = require('../utils/eventTimeWindows');
     const timeStatus = getEventTimeStatus(event);
 
-    // Vérifier si le check-in est autorisé (2h avant → fin de l'événement)
+    // Vérifier si le check-in est autorisé (2h avant → début + tolérance retard)
     if (!timeStatus.canCheckIn) {
       let detailedMessage = '';
       
       if (timeStatus.isBeforeWindow) {
         const eventStart = new Date(event.startDate);
         const twoHoursBefore = new Date(eventStart.getTime() - 2 * 60 * 60 * 1000);
-        detailedMessage = `Le check-in sera disponible 2 heures avant le début de l'événement, à partir du ${twoHoursBefore.toLocaleString('fr-FR', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
+        const lateThreshold = event.lateThreshold || 15;
+        const checkInEnd = new Date(eventStart.getTime() + lateThreshold * 60 * 1000);
+        
+        detailedMessage = `Le check-in sera disponible de 2h avant le début (${twoHoursBefore.toLocaleString('fr-FR', {
           hour: '2-digit',
           minute: '2-digit'
-        })}.`;
+        })}) jusqu'à ${lateThreshold} min après le début (${checkInEnd.toLocaleString('fr-FR', {
+          hour: '2-digit',
+          minute: '2-digit'
+        })}).`;
+      } else if (timeStatus.isAfterCheckInWindow) {
+        const lateThreshold = event.lateThreshold || 15;
+        detailedMessage = `Le délai de check-in est dépassé (tolérance de ${lateThreshold} minutes après le début).`;
       } else if (timeStatus.isAfterEvent) {
         detailedMessage = 'L\'événement est terminé. Le check-in n\'est plus disponible.';
       } else {
@@ -223,7 +229,8 @@ exports.checkIn = async (req, res) => {
           event: {
             name: event.name,
             startDate: event.startDate,
-            endDate: event.endDate
+            endDate: event.endDate,
+            lateThreshold: event.lateThreshold || 15
           }
         }
       });

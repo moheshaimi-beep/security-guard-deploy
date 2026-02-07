@@ -394,6 +394,8 @@ exports.loginByCin = async (req, res) => {
       if (nextEvent) {
         const eventStart = new Date(nextEvent.startDate);
         const twoHoursBefore = new Date(eventStart.getTime() - 2 * 60 * 60 * 1000);
+        const lateThreshold = nextEvent.lateThreshold || 15;
+        const checkInEnd = new Date(eventStart.getTime() + lateThreshold * 60 * 1000);
         const timeDiff = twoHoursBefore - now;
         const hoursDiff = Math.floor(timeDiff / (1000 * 60 * 60));
         const minutesDiff = Math.floor((timeDiff % (1000 * 60 * 60)) / (1000 * 60));
@@ -402,19 +404,22 @@ exports.loginByCin = async (req, res) => {
           eventName: nextEvent.eventName,
           startDate: nextEvent.startDate,
           accessibleAt: twoHoursBefore,
+          checkInEndTime: checkInEnd,
+          lateThreshold: lateThreshold,
           hoursRemaining: hoursDiff,
           minutesRemaining: minutesDiff
         };
 
-        detailedMessage = `Le check-in pour l'événement "${nextEvent.eventName}" sera disponible 2 heures avant le début, soit à partir du ${twoHoursBefore.toLocaleString('fr-FR', { 
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric',
+        detailedMessage = `Le check-in pour l'événement "${nextEvent.eventName}" sera disponible 2 heures avant le début (${twoHoursBefore.toLocaleString('fr-FR', { 
           hour: '2-digit',
           minute: '2-digit'
-        })}. Il reste ${hoursDiff}h${minutesDiff}min.`;
+        })}) jusqu'à ${lateThreshold} min après le début (${checkInEnd.toLocaleString('fr-FR', { 
+          hour: '2-digit',
+          minute: '2-digit'
+        })}). Il reste ${hoursDiff}h${minutesDiff}min.`;
       } else if (pastEvent) {
-        detailedMessage = `L'événement "${pastEvent.eventName}" est terminé. Le check-in n'est plus disponible.`;
+        const lateThreshold = pastEvent.lateThreshold || 15;
+        detailedMessage = `L'événement "${pastEvent.eventName}" est terminé. Le check-in était disponible jusqu'à ${lateThreshold} min après le début.`;
       } else {
         detailedMessage = 'Aucun événement n\'est actuellement accessible pour le check-in.';
       }
