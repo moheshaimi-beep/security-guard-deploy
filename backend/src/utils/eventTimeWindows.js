@@ -5,7 +5,16 @@
  * - Temps réel activé 2h avant le début jusqu'à la fin de l'événement
  * - Check-in autorisé 2h avant le début jusqu'à (début + tolérance retard)
  * - Check-out autorisé (fin - tolérance départ anticipé) jusqu'à (fin + tolérance départ tardif)
+ * 
+ * MODE TEST: Définir BYPASS_TIME_WINDOWS=true pour désactiver les validations temporelles
  */
+
+// Mode bypass pour tests/développement
+const BYPASS_TIME_WINDOWS = process.env.BYPASS_TIME_WINDOWS === 'true';
+
+if (BYPASS_TIME_WINDOWS) {
+  console.log('⚠️ MODE TEST ACTIVÉ - Validation fenêtres de temps DÉSACTIVÉE');
+}
 
 /**
  * Vérifie si le tracking GPS doit être actif pour un événement
@@ -13,6 +22,11 @@
  * @returns {boolean} True si le tracking doit être actif
  */
 const isTrackingAllowed = (event) => {
+  // MODE TEST: Toujours autoriser
+  if (BYPASS_TIME_WINDOWS) {
+    return true;
+  }
+
   if (!event || !event.startDate || !event.endDate) {
     return false;
   }
@@ -36,6 +50,11 @@ const isTrackingAllowed = (event) => {
  * @returns {boolean} True si le check-in est autorisé
  */
 const isCheckInAllowed = (event) => {
+  // MODE TEST: Toujours autoriser
+  if (BYPASS_TIME_WINDOWS) {
+    return true;
+  }
+
   if (!event || !event.startDate || !event.endDate) {
     return false;
   }
@@ -60,6 +79,11 @@ const isCheckInAllowed = (event) => {
  * @returns {boolean} True si le check-out est autorisé
  */
 const isCheckOutAllowed = (event) => {
+  // MODE TEST: Toujours autoriser
+  if (BYPASS_TIME_WINDOWS) {
+    return true;
+  }
+
   if (!event || !event.endDate) {
     return false;
   }
