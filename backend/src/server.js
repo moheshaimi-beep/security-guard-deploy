@@ -223,6 +223,9 @@ const io = new Server(httpServer, {
 // Make io accessible to routes and services
 app.set('io', io);
 
+// ✅ Trust proxy (requis pour Render.com et express-rate-limit)
+app.set('trust proxy', 1);
+
 // ✅ CORS Configuration pour Socket.IO
 // DOIT être le PREMIER middleware
 app.use((req, res, next) => {
