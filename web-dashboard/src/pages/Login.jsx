@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { FiMail, FiLock, FiEye, FiEyeOff, FiGlobe, FiShield, FiCheck } from 'react-icons/fi';
+import { FiMail, FiLock, FiEye, FiEyeOff, FiGlobe, FiShield, FiCheck, FiSmartphone, FiDownload } from 'react-icons/fi';
 import useAuthStore from '../hooks/useAuth';
 import useI18n from '../hooks/useI18n';
 
@@ -299,9 +299,33 @@ const Login = () => {
         </div>
 
         {/* Footer */}
-        <p className="text-center text-white/60 text-sm mt-6">
-          © {new Date().getFullYear()} SGM – Security Guard | Système de gestion
-        </p>
+        <div className="text-center mt-6 space-y-4">
+          {/* Download Mobile App Button */}
+          <div className="bg-white/10 backdrop-blur-sm rounded-2xl p-4 border border-white/20">
+            <div className="flex items-center justify-center gap-2 mb-3">
+              <FiSmartphone className="text-white text-xl" />
+              <h3 className="text-white font-semibold">Application Mobile</h3>
+            </div>
+            <p className="text-white/80 text-sm mb-4">
+              Téléchargez notre application pour un accès mobile optimisé
+            </p>
+            <a
+              href="/security-guard-mobile.apk"
+              download
+              className="inline-flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl font-semibold hover:from-green-600 hover:to-green-700 transition-all transform hover:scale-105 shadow-lg hover:shadow-xl"
+            >
+              <FiDownload className="text-lg" />
+              <span>Télécharger l'App Mobile</span>
+            </a>
+            <p className="text-white/60 text-xs mt-3">
+              Compatible Android • Version 1.0.0
+            </p>
+          </div>
+
+          <p className="text-white/60 text-sm">
+            © {new Date().getFullYear()} SGM – Security Guard | Système de gestion
+          </p>
+        </div>
       </div>
 
       {/* Click outside to close language menu */}
