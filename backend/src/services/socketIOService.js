@@ -304,7 +304,7 @@ class SocketIOService {
       const dbPositions = await GeoTracking.findAll({
         where: {
           eventId,
-          timestamp: {
+          recordedAt: {
             [Op.gte]: new Date(Date.now() - 5 * 60 * 1000) // Dernières 5 minutes
           }
         },
@@ -313,7 +313,7 @@ class SocketIOService {
           as: 'user', // ✅ Alias requis
           attributes: ['id', 'firstName', 'lastName', 'employeeId', 'role', 'phone', 'cin']
         }],
-        order: [['timestamp', 'DESC']],
+        order: [['recordedAt', 'DESC']],
         limit: 100
       });
       
@@ -325,7 +325,7 @@ class SocketIOService {
         speed: pos.speed,
         heading: pos.heading,
         batteryLevel: pos.batteryLevel,
-        timestamp: pos.timestamp.getTime(),
+        timestamp: pos.recordedAt.getTime(),
         isMoving: pos.isMoving,
         user: pos.user ? {
           id: pos.user.id,
