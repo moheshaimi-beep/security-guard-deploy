@@ -695,9 +695,15 @@ const CheckIn = () => {
     let watchId = null;
     
     // Démarrer le tracking seulement si:
+    // 0. L'utilisateur a au moins un événement assigné
     // 1. L'utilisateur a pointé
     // 2. L'utilisateur n'est pas encore sorti
     // 3. On est dans la fenêtre temporelle autorisée (2h avant -> fin événement)
+    if (todayEvents.length === 0) {
+      console.log('⏸️ GPS Watch désactivé - Aucun événement assigné');
+      return;
+    }
+    
     const selectedEvent = todayEvents.find(e => e.id === selectedEventId) || todayEvents[0];
     const shouldTrack = shouldTrackGPS(selectedEvent, todayAttendance?.checkedIn, todayAttendance?.checkedOut);
     
@@ -3253,6 +3259,20 @@ const CheckIn = () => {
 
             {/* Check-in Buttons */}
             {!isLocked && !autoSubmitDone && (() => {
+              // Vérifier si l'utilisateur a des événements assignés
+              if (todayEvents.length === 0) {
+                return (
+                  <div className="rounded-xl p-6 border bg-gray-500/20 border-gray-500/30 text-center">
+                    <div className="flex flex-col items-center gap-3">
+                      <FiAlertCircle size={40} className="text-gray-400" />
+                      <p className="text-gray-300 font-semibold text-lg">Aucun événement assigné aujourd'hui</p>
+                      <p className="text-gray-400 text-sm">Le check-in et le tracking GPS ne sont pas disponibles</p>
+                      <p className="text-gray-500 text-xs mt-2">Contactez votre superviseur pour une assignation</p>
+                    </div>
+                  </div>
+                );
+              }
+
               // Calculer le statut temporel de l'événement sélectionné
               const selectedEvent = todayEvents.find(e => e.id === selectedEventId) || todayEvents[0];
               const timeStatus = getEventTimeStatus(selectedEvent);
