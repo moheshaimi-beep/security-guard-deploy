@@ -288,12 +288,32 @@ const RealTimeTracking = () => {
         params: { status: 'active,scheduled' }
       });
       
-      // S'assurer que allEvents est toujours un tableau
-      let allEvents = response.data?.data || response.data || [];
-      if (!Array.isArray(allEvents)) {
-        console.warn('⚠️ Response data n\'est pas un tableau:', allEvents);
-        allEvents = [];
+      // Extraire correctement le tableau selon la structure de la réponse
+      let allEvents = [];
+      
+      if (response.data) {
+        // Si response.data.data existe et est un tableau
+        if (Array.isArray(response.data.data)) {
+          allEvents = response.data.data;
+        }
+        // Sinon si response.data.events existe et est un tableau
+        else if (Array.isArray(response.data.events)) {
+          allEvents = response.data.events;
+        }
+        // Sinon si response.data est directement un tableau
+        else if (Array.isArray(response.data)) {
+          allEvents = response.data;
+        }
+        // Sinon structure inconnue, extraire le premier tableau trouvé
+        else if (typeof response.data === 'object') {
+          const firstArrayValue = Object.values(response.data).find(val => Array.isArray(val));
+          if (firstArrayValue) {
+            allEvents = firstArrayValue;
+          }
+        }
       }
+      
+      console.log('📊 Événements chargés:', allEvents.length);
       
       // Filtrer : événements actifs OU qui commencent dans moins de 2h
       const now = new Date();
