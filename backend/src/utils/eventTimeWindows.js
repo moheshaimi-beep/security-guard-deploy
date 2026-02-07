@@ -4,7 +4,7 @@
  * Règles métier:
  * - Temps réel activé 2h avant le début jusqu'à la fin de l'événement
  * - Check-in autorisé 2h avant le début jusqu'à (début + tolérance retard)
- * - Check-out autorisé 5 minutes avant la fin jusqu'à la fin
+ * - Check-out autorisé (fin - tolérance départ anticipé) jusqu'à (fin + tolérance départ tardif)
  */
 
 /**
@@ -67,11 +67,16 @@ const isCheckOutAllowed = (event) => {
   const now = new Date();
   const end = new Date(event.endDate);
   
-  // 5 minutes avant la fin
-  const checkOutStart = new Date(end.getTime() - 5 * 60 * 1000);
+  // Tolérance départ anticipé (par défaut 30 minutes avant la fin)
+  const earlyCheckoutTolerance = event.earlyCheckoutTolerance || 30;
+  const checkOutStart = new Date(end.getTime() - earlyCheckoutTolerance * 60 * 1000);
   
-  // Check-out autorisé de 5 min avant la fin jusqu'à la fin
-  return now >= checkOutStart && now <= end;
+  // Tolérance départ tardif (par défaut 15 minutes après la fin)
+  const lateCheckoutTolerance = event.lateCheckoutTolerance || 15;
+  const checkOutEnd = new Date(end.getTime() + lateCheckoutTolerance * 60 * 1000);
+  
+  // Check-out autorisé de (fin - tolérance anticipé) jusqu'à (fin + tolérance tardif)
+  return now >= checkOutStart && now <= checkOutEnd;
 };
 
 /**
@@ -100,17 +105,22 @@ const getEventTimeStatus = (event) => {
   // 2 heures avant le début
   const preWindowStart = new Date(start.getTime() - 2 * 60 * 60 * 1000);
   
-  // Tolérance de retard (par défaut 15 minutes si non définie)
+  // Tolérance de retard check-in (par défaut 15 minutes si non définie)
   const lateThreshold = event.lateThreshold || 15;
   const checkInEnd = new Date(start.getTime() + lateThreshold * 60 * 1000);
   
-  // 5 minutes avant la fin
-  const checkOutStart = new Date(end.getTime() - 5 * 60 * 1000);
+  // Tolérance check-out
+  const earlyCheckoutTolerance = event.earlyCheckoutTolerance || 30;
+  const lateCheckoutTolerance = event.lateCheckoutTolerance || 15;
+  const checkOutStart = new Date(end.getTime() - earlyCheckoutTolerance * 60 * 1000);
+  const checkOutEnd = new Date(end.getTime() + lateCheckoutTolerance * 60 * 1000);
 
   const isBeforeWindow = now < preWindowStart;
   const isInPreWindow = now >= preWindowStart && now < start;
   const isDuringEvent = now >= start && now <= end;
   const isAfterCheckInWindow = now > checkInEnd;
+  const isInCheckOutWindow = now >= checkOutStart && now <= checkOutEnd;
+  const isAfterCheckOutWindow = now > checkOutEnd;
   const isNearEnd = now >= checkOutStart && now <= end;
   const isAfterEvent = now > end;
 
@@ -119,6 +129,8 @@ const getEventTimeStatus = (event) => {
     isInPreWindow,
     isDuringEvent,
     isAfterCheckInWindow,
+    isInCheckOutWindow,
+    isAfterCheckOutWindow,
     isNearEnd,
     isAfterEvent,
     canCheckIn: isCheckInAllowed(event),

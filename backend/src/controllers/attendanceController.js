@@ -464,7 +464,7 @@ exports.checkOut = async (req, res) => {
       });
     }
 
-    // ✅ VÉRIFICATION STRICTE: Check-out autorisé seulement 5 min avant la fin
+    // ✅ VÉRIFICATION STRICTE: Check-out avec tolérance anticipé/tardif
     const event = attendance.event;
     if (!event) {
       return res.status(404).json({
@@ -478,15 +478,22 @@ exports.checkOut = async (req, res) => {
     if (!timeStatus.canCheckOut) {
       let detailedMessage = '';
       
-      if (!timeStatus.isNearEnd && timeStatus.isDuringEvent) {
-        const eventEnd = new Date(event.endDate);
-        const fiveMinBefore = new Date(eventEnd.getTime() - 5 * 60 * 1000);
-        detailedMessage = `Le check-out sera disponible 5 minutes avant la fin de l'événement, à partir de ${fiveMinBefore.toLocaleTimeString('fr-FR', {
+      const eventEnd = new Date(event.endDate);
+      const earlyCheckoutTolerance = event.earlyCheckoutTolerance || 30;
+      const lateCheckoutTolerance = event.lateCheckoutTolerance || 15;
+      const checkOutStart = new Date(eventEnd.getTime() - earlyCheckoutTolerance * 60 * 1000);
+      const checkOutEnd = new Date(eventEnd.getTime() + lateCheckoutTolerance * 60 * 1000);
+      
+      if (!timeStatus.isInCheckOutWindow && timeStatus.isDuringEvent) {
+        detailedMessage = `Le check-out sera disponible de ${earlyCheckoutTolerance} min avant la fin (${checkOutStart.toLocaleString('fr-FR', {
           hour: '2-digit',
           minute: '2-digit'
-        })}.`;
-      } else if (timeStatus.isAfterEvent) {
-        detailedMessage = 'L\'événement est terminé. Le check-out n\'est plus disponible.';
+        })}) jusqu'à ${lateCheckoutTolerance} min après la fin (${checkOutEnd.toLocaleString('fr-FR', {
+          hour: '2-digit',
+          minute: '2-digit'
+        })}).`;
+      } else if (timeStatus.isAfterCheckOutWindow) {
+        detailedMessage = `Le délai de check-out est dépassé (tolérance de ${lateCheckoutTolerance} minutes après la fin).`;
       } else {
         detailedMessage = 'Le check-out n\'est pas encore disponible.';
       }
@@ -499,7 +506,9 @@ exports.checkOut = async (req, res) => {
           timeStatus,
           event: {
             name: event.name,
-            endDate: event.endDate
+            endDate: event.endDate,
+            earlyCheckoutTolerance: earlyCheckoutTolerance,
+            lateCheckoutTolerance: lateCheckoutTolerance
           }
         }
       });
