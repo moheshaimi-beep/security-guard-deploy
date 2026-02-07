@@ -15,6 +15,7 @@ const { cleanupDatabaseIndexes } = require('./utils/databaseCleanup');
 const { startScheduler } = require('./scheduler');
 const socketIOService = require('./services/socketIOService');
 const { initScheduledBackupService } = require('./services/scheduledBackupService');
+const { initSocketBroadcast } = require('./utils/socketBroadcast');
 
 // Liste des permissions par défaut
 const DEFAULT_PERMISSIONS = [
@@ -452,6 +453,10 @@ const startServer = async () => {
       // ✅ Initialize Socket.IO Service AFTER server listening
       socketIOService.initialize(io);
       console.log('✅ Socket.IO Service initialized');
+      
+      // ✅ Initialize Socket Broadcast for real-time updates
+      initSocketBroadcast(io);
+      console.log('✅ Socket Broadcast initialized - Real-time updates enabled');
       
       // ✅ Redémarrer le scheduler avec l'instance Socket.IO pour la vérification des fenêtres de temps
       startScheduler(io);

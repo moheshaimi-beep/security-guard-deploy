@@ -3,6 +3,7 @@ const { Op } = require('sequelize');
 const { logActivity } = require('../middlewares/activityLogger');
 const notificationService = require('../services/notificationService');
 const { assignSupervisorToZone, removeSupervisorFromZone } = require('../utils/supervisorZoneManager');
+const { broadcastAssignment } = require('../utils/socketBroadcast');
 
 // Get all assignments with filters
 exports.getAssignments = async (req, res) => {
@@ -510,6 +511,9 @@ exports.createAssignment = async (req, res) => {
       ]
     });
 
+    // 🔥 BROADCAST TEMPS RÉEL - Nouvelle affectation
+    broadcastAssignment.created(fullAssignment.toJSON(), { broadcast: 'all' });
+
     res.status(201).json({
       success: true,
       message: 'Affectation créée avec succès',
@@ -707,6 +711,9 @@ exports.updateAssignment = async (req, res) => {
       req
     });
 
+    // 🔥 BROADCAST TEMPS RÉEL - Affectation modifiée
+    broadcastAssignment.updated(assignment.toJSON(), { broadcast: 'all' });
+
     res.json({
       success: true,
       message: 'Affectation mise à jour',
@@ -799,6 +806,8 @@ exports.deleteAssignment = async (req, res) => {
       });
     }
 
+    const assignmentData = assignment.toJSON();
+    
     await assignment.destroy();
 
     await logActivity({
@@ -807,9 +816,12 @@ exports.deleteAssignment = async (req, res) => {
       entityType: 'assignment',
       entityId: assignment.id,
       description: `Affectation de ${assignment.agent.firstName} ${assignment.agent.lastName} supprimée`,
-      oldValues: assignment.toJSON(),
+      oldValues: assignmentData,
       req
     });
+
+    // 🔥 BROADCAST TEMPS RÉEL - Affectation supprimée
+    broadcastAssignment.deleted({ id: assignment.id, eventId: assignment.eventId, agentId: assignment.agentId }, { broadcast: 'all' });
 
     res.json({
       success: true,

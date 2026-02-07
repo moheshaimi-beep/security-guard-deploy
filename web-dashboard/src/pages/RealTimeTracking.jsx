@@ -12,6 +12,7 @@ import { toast } from 'react-toastify';
 import { io } from 'socket.io-client';
 import api from '../services/api';
 import useAuthStore from '../hooks/useAuth';
+import useRealTimeSync from '../hooks/useRealTimeSync';
 
 // Socket.IO URL
 const SOCKET_URL = process.env.REACT_APP_API_URL?.replace('/api', '') || 
@@ -264,6 +265,43 @@ const RealTimeTracking = () => {
   const socketRef = useRef(null);
   const isMountedRef = useRef(true);
   const mapRef = useRef(null);
+
+  // 🔥 SYNCHRONISATION TEMPS RÉEL AUTOMATIQUE - Événements
+  useRealTimeSync('events', ({ type, data }) => {
+    console.log(`🔥 Mise à jour temps réel: events:${type}`, data);
+    
+    if (type === 'created' || type === 'updated') {
+      // Recharger les événements automatiquement
+      loadEvents();
+      toast.info(`Événement ${type === 'created' ? 'ajouté' : 'mis à jour'}: ${data.name || data.eventName}`);
+    } else if (type === 'deleted') {
+      // Supprimer l'événement de la liste
+      setEvents(prev => prev.filter(e => e.id !== data.id));
+      if (selectedEvent?.id === data.id) {
+        setSelectedEvent(null);
+      }
+      toast.info(`Événement supprimé: ${data.name}`);
+    }
+  }, user);
+
+  // 🔥 SYNCHRONISATION TEMPS RÉEL AUTOMATIQUE - Assignments
+  useRealTimeSync('assignments', ({ type, data }) => {
+    console.log(`🔥 Mise à jour temps réel: assignments:${type}`, data);
+    // Recharger les événements car les affectations impactent les agents
+    loadEvents();
+    if (type === 'created') {
+      toast.info('Nouvelle affectation ajoutée');
+    }
+  }, user);
+
+  // 🔥 SYNCHRONISATION TEMPS RÉEL AUTOMATIQUE - Users
+  useRealTimeSync('users', ({ type, data }) => {
+    console.log(`🔥 Mise à jour temps réel: users:${type}`, data);
+    // Recharger si c'est un agent/supervisor
+    if (data.role === 'agent' || data.role === 'supervisor') {
+      loadEvents();
+    }
+  }, user);
 
   // Responsive sidebar
   useEffect(() => {

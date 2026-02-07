@@ -2,6 +2,7 @@ const { Event, Assignment, Attendance, User, Zone } = require('../models');
 const { Op } = require('sequelize');
 const { logActivity } = require('../middlewares/activityLogger');
 const { computeEventStatus, combineDateAndTime } = require('../utils/eventHelpers');
+const { broadcastEvent } = require('../utils/socketBroadcast');
 
 /**
  * Middleware pour mettre à jour automatiquement les statuts des événements
@@ -236,6 +237,9 @@ exports.createEvent = async (req, res) => {
       req
     });
 
+    // 🔥 BROADCAST TEMPS RÉEL - Nouvel événement
+    broadcastEvent.created(event.toJSON(), { broadcast: 'all' });
+
     res.status(201).json({
       success: true,
       message: 'Événement créé avec succès',
@@ -304,6 +308,9 @@ exports.updateEvent = async (req, res) => {
       req
     });
 
+    // 🔥 BROADCAST TEMPS RÉEL - Événement modifié
+    broadcastEvent.updated(event.toJSON(), { broadcast: 'all' });
+
     res.json({
       success: true,
       message: 'Événement mis à jour',
@@ -347,15 +354,20 @@ exports.deleteEvent = async (req, res) => {
 
     await event.destroy();
 
+    const eventData = event.toJSON();
+
     await logActivity({
       userId: req.user.id,
       action: 'DELETE_EVENT',
       entityType: 'event',
       entityId: event.id,
       description: `Événement "${event.name}" supprimé`,
-      oldValues: event.toJSON(),
+      oldValues: eventData,
       req
     });
+
+    // 🔥 BROADCAST TEMPS RÉEL - Événement supprimé
+    broadcastEvent.deleted({ id: event.id, name: event.name }, { broadcast: 'all' });
 
     res.json({
       success: true,

@@ -3,6 +3,7 @@ const { Op } = require('sequelize');
 const { logActivity } = require('../middlewares/activityLogger');
 const { prepareDocumentsForCreation, saveDocumentsAfterUserCreation } = require('./documentController');
 const websocketService = require('../services/websocketService');
+const { broadcastUser } = require('../utils/socketBroadcast');
 
 // Get all users with pagination and filters
 exports.getUsers = async (req, res) => {
@@ -339,6 +340,9 @@ exports.createUser = async (req, res) => {
       req
     });
 
+    // 🔥 BROADCAST TEMPS RÉEL - Nouvel utilisateur
+    broadcastUser.created(user.toJSON(), { broadcast: 'all' });
+
     res.status(201).json({
       success: true,
       message: 'Utilisateur créé avec succès',
@@ -474,6 +478,9 @@ exports.updateUser = async (req, res) => {
       req
     });
 
+    // 🔥 BROADCAST TEMPS RÉEL - Utilisateur modifié
+    broadcastUser.updated(user.toJSON(), { broadcast: 'all' });
+
     res.json({
       success: true,
       message: 'Utilisateur mis à jour',
@@ -507,6 +514,8 @@ exports.deleteUser = async (req, res) => {
       });
     }
 
+    const userData = user.toJSON();
+    
     await user.destroy(); // Soft delete due to paranoid: true
 
     await logActivity({
@@ -515,9 +524,12 @@ exports.deleteUser = async (req, res) => {
       entityType: 'user',
       entityId: user.id,
       description: `Utilisateur ${user.firstName} ${user.lastName} supprimé`,
-      oldValues: user.toJSON(),
+      oldValues: userData,
       req
     });
+
+    // 🔥 BROADCAST TEMPS RÉEL - Utilisateur supprimé
+    broadcastUser.deleted({ id: user.id, firstName: user.firstName, lastName: user.lastName }, { broadcast: 'all' });
 
     res.json({
       success: true,

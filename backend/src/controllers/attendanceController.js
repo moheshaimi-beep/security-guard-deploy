@@ -3,6 +3,7 @@ const { Op } = require('sequelize');
 const { logActivity } = require('../middlewares/activityLogger');
 const geoService = require('../services/geoService');
 const notificationService = require('../services/notificationService');
+const { broadcastAttendance } = require('../utils/socketBroadcast');
 
 // Get device info (IP address and device info)
 exports.getDeviceInfo = async (req, res) => {
