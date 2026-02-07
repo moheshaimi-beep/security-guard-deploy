@@ -464,7 +464,7 @@ const startServer = async () => {
       // ✅ Initialize GPS Tracking Service for real-time agent tracking
       const GPSTrackingService = require('./services/gpsTrackingService');
       const gpsTrackingService = new GPSTrackingService(io);
-      await gpsTrackingService.cleanup(); // Nettoyer les anciens tracking
+      gpsTrackingService.cleanup(); // Nettoyer les anciens tracking (pas besoin d'await, cleanup est synchrone)
       app.set('gpsTrackingService', gpsTrackingService);
       console.log('✅ GPS Tracking Service initialized - Real-time agent tracking enabled');
       

@@ -419,7 +419,7 @@ class GPSTrackingService {
   /**
    * Nettoie les tracking actifs (appelé au démarrage du serveur)
    */
-  async cleanup() {
+  cleanup() {
     console.log('🧹 Nettoyage des tracking actifs...');
     this.activeTrackers.clear();
     this.agentStatuses.clear();
