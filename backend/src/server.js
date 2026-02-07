@@ -461,6 +461,13 @@ const startServer = async () => {
       initSocketBroadcast(io);
       console.log('✅ Socket Broadcast initialized - Real-time updates enabled');
       
+      // ✅ Initialize GPS Tracking Service for real-time agent tracking
+      const GPSTrackingService = require('./services/gpsTrackingService');
+      const gpsTrackingService = new GPSTrackingService(io);
+      await gpsTrackingService.cleanup(); // Nettoyer les anciens tracking
+      app.set('gpsTrackingService', gpsTrackingService);
+      console.log('✅ GPS Tracking Service initialized - Real-time agent tracking enabled');
+      
       // ✅ Redémarrer le scheduler avec l'instance Socket.IO pour la vérification des fenêtres de temps
       startScheduler(io);
       console.log('✅ Scheduler mis à jour avec Socket.IO pour la gestion automatique des fenêtres de temps');
