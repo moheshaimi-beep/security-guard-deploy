@@ -287,7 +287,13 @@ const RealTimeTracking = () => {
       const response = await api.get('/events', {
         params: { status: 'active,scheduled' }
       });
-      const allEvents = response.data.data || [];
+      
+      // S'assurer que allEvents est toujours un tableau
+      let allEvents = response.data?.data || response.data || [];
+      if (!Array.isArray(allEvents)) {
+        console.warn('⚠️ Response data n\'est pas un tableau:', allEvents);
+        allEvents = [];
+      }
       
       // Filtrer : événements actifs OU qui commencent dans moins de 2h
       const now = new Date();
