@@ -288,52 +288,36 @@ const RealTimeTracking = () => {
         params: { status: 'active,scheduled' }
       });
       
-      // Debug structure complète
-      console.log('🔍 Structure response complète:', response);
-      console.log('🔍 response.data:', response.data);
-      console.log('🔍 Type de response.data:', typeof response.data);
-      console.log('🔍 Clés de response.data:', response.data ? Object.keys(response.data) : 'null');
-      console.log('🔍 Valeurs complètes:', response.data);
-      
-      // Extraire correctement le tableau selon la structure de la réponse
+      // Extraire événements selon structure API
       let allEvents = [];
       
       if (response.data) {
-        // Vérifier toutes les propriétés possibles
-        const possibleKeys = ['data', 'events', 'items', 'results', 'list'];
-        
-        for (const key of possibleKeys) {
-          if (Array.isArray(response.data[key])) {
-            console.log(`✅ Trouvé dans response.data.${key}`);
-            allEvents = response.data[key];
-            break;
-          }
+        // Structure: { success: true, data: { events: [...], pagination: {...} } }
+        if (response.data.data && Array.isArray(response.data.data.events)) {
+          console.log('✅ Événements trouvés dans response.data.data.events');
+          allEvents = response.data.data.events;
         }
-        
-        // Si pas trouvé, chercher le premier tableau
-        if (allEvents.length === 0 && typeof response.data === 'object') {
-          console.log('🔎 Recherche tableau dans l\'objet...');
-          console.log('🔎 Clés disponibles:', Object.keys(response.data));
-          
-          const firstArrayValue = Object.values(response.data).find(val => Array.isArray(val));
-          if (firstArrayValue) {
-            console.log('✅ Tableau trouvé via fallback:', firstArrayValue);
-            allEvents = firstArrayValue;
-          } else {
-            console.error('❌ Aucun tableau trouvé dans response.data');
-            console.error('❌ Structure reçue:', JSON.stringify(response.data, null, 2));
-          }
+        // Fallback: { data: { events: [...] } }
+        else if (response.data.events && Array.isArray(response.data.events)) {
+          console.log('✅ Événements trouvés dans response.data.events');
+          allEvents = response.data.events;
         }
-        
-        // Si response.data est directement un tableau
-        if (Array.isArray(response.data)) {
-          console.log('✅ response.data est directement un tableau');
+        // Fallback: { data: [...] }
+        else if (Array.isArray(response.data.data)) {
+          console.log('✅ Événements trouvés dans response.data.data (tableau direct)');
+          allEvents = response.data.data;
+        }
+        // Fallback: tableau direct
+        else if (Array.isArray(response.data)) {
+          console.log('✅ Événements trouvés dans response.data (tableau direct)');
           allEvents = response.data;
+        }
+        else {
+          console.error('❌ Structure API inconnue:', response.data);
         }
       }
       
       console.log('📊 Événements chargés:', allEvents.length);
-      console.log('📊 Détails événements:', allEvents);
       
       // Filtrer : événements actifs OU qui commencent dans moins de 2h
       const now = new Date();
