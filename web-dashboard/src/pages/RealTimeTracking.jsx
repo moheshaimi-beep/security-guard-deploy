@@ -1127,10 +1127,7 @@ const RealTimeTracking = () => {
             )}
             
             {/* Afficher les responsables */}
-            {(() => {
-              console.log('🗺️ Rendu des superviseurs - Nombre:', supervisors.size);
-              console.log('🗺️ Superviseurs data:', Array.from(supervisors.entries()));
-              return Array.from(supervisors.entries()).map(([userId, supervisor]) => {
+            {Array.from(supervisors.entries()).map(([userId, supervisor]) => {
               // Calculer offset si plusieurs personnes au même endroit
               const offset = calculateMarkerOffset([supervisor.latitude, supervisor.longitude], 'supervisor-' + userId);
               const adjustedLat = supervisor.latitude + offset.lat;
@@ -1210,14 +1207,10 @@ const RealTimeTracking = () => {
                   </Popup>
                 </Marker>
               );
-              });
-            })()}
+            })}
             
             {/* Afficher les agents */}
-            {(() => {
-              console.log('🗺️ Rendu des agents - Nombre:', agents.size);
-              console.log('🗺️ Agents data:', Array.from(agents.entries()));
-              return Array.from(agents.entries()).map(([userId, agent]) => {
+            {Array.from(agents.entries()).map(([userId, agent]) => {
               const trail = trails.get(userId) || [];
               // Calculer offset si plusieurs personnes au même endroit
               const offset = calculateMarkerOffset([agent.latitude, agent.longitude], userId);

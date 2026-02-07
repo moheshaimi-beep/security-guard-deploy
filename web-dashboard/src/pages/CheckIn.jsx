@@ -12,6 +12,7 @@ import { authAPI, attendanceAPI, eventsAPI, usersAPI, assignmentsAPI, zonesAPI }
 import { toast } from 'react-toastify';
 import { getDeviceFingerprint, getDeviceInfo } from '../utils/deviceFingerprint';
 import { shouldDisplayEvent } from '../utils/eventHelpers';
+import { getEventTimeStatus, formatTimeRemaining, getHelpMessage, shouldTrackGPS } from '../utils/eventTimeWindows';
 import * as faceapi from 'face-api.js';
 import SmartMiniMap from '../components/SmartMiniMap';
 import AgentCreationModal from '../components/AgentCreationModal';
@@ -693,8 +694,14 @@ const CheckIn = () => {
   useEffect(() => {
     let watchId = null;
     
-    // Démarrer le tracking seulement si l'utilisateur a pointé
-    if (todayAttendance?.checkedIn && !todayAttendance?.checkedOut && user?.id) {
+    // Démarrer le tracking seulement si:
+    // 1. L'utilisateur a pointé
+    // 2. L'utilisateur n'est pas encore sorti
+    // 3. On est dans la fenêtre temporelle autorisée (2h avant -> fin événement)
+    const selectedEvent = todayEvents.find(e => e.id === selectedEventId) || todayEvents[0];
+    const shouldTrack = shouldTrackGPS(selectedEvent, todayAttendance?.checkedIn, todayAttendance?.checkedOut);
+    
+    if (shouldTrack && user?.id) {
       console.log('📡 Démarrage du tracking GPS en temps réel...');
       
       const sendPosition = (position) => {
@@ -731,6 +738,8 @@ const CheckIn = () => {
         
         console.log('✅ GPS Watch démarré, ID:', watchId);
       }
+    } else if (todayAttendance?.checkedIn && !todayAttendance?.checkedOut) {
+      console.log('⏸️ GPS Watch en pause - hors fenêtre temporelle événement');
     }
     
     // Cleanup
@@ -740,7 +749,7 @@ const CheckIn = () => {
         console.log('🛑 GPS Watch arrêté');
       }
     };
-  }, [todayAttendance?.checkedIn, todayAttendance?.checkedOut, user?.id]);
+  }, [todayAttendance?.checkedIn, todayAttendance?.checkedOut, user?.id, selectedEventId, todayEvents]);
 
   // Auto-sélectionner le premier événement quand la liste change (pour agents et responsables)
   useEffect(() => {
@@ -3243,50 +3252,117 @@ const CheckIn = () => {
             )}
 
             {/* Check-in Buttons */}
-            {!isLocked && !autoSubmitDone && (
-              <div className="grid grid-cols-2 gap-4">
-                <button
-                  onClick={() => submitCheckIn('in')}
-                  disabled={submitting || (todayAttendance?.checkedIn && !todayAttendance?.checkedOut) || !facialVerified}
-                  className={`py-5 md:py-6 rounded-2xl font-bold text-lg shadow-lg transition-all flex items-center justify-center gap-2 ${
-                    submitting && checkInType === 'in'
-                      ? 'bg-gray-500 text-white cursor-not-allowed'
-                      : todayAttendance?.checkedIn && !todayAttendance?.checkedOut
-                      ? 'bg-gray-400 text-white cursor-not-allowed'
-                      : !facialVerified
-                      ? 'bg-gray-400 text-white cursor-not-allowed'
-                      : 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-green-500/30 hover:shadow-xl'
-                  }`}
-                >
-                  {submitting && checkInType === 'in' ? (
-                    <FiLoader className="animate-spin" size={22} />
-                  ) : (
-                    <FiNavigation size={22} />
+            {!isLocked && !autoSubmitDone && (() => {
+              // Calculer le statut temporel de l'événement sélectionné
+              const selectedEvent = todayEvents.find(e => e.id === selectedEventId) || todayEvents[0];
+              const timeStatus = getEventTimeStatus(selectedEvent);
+              const helpMessage = getHelpMessage(timeStatus);
+
+              return (
+                <>
+                  {/* Message d'aide temporel */}
+                  {helpMessage && (
+                    <div className={`rounded-xl p-4 border mb-4 ${
+                      timeStatus.isAfterEvent 
+                        ? 'bg-gray-500/20 border-gray-500/30 text-gray-300'
+                        : timeStatus.isBeforeWindow
+                        ? 'bg-purple-500/20 border-purple-500/30 text-purple-300'
+                        : timeStatus.canCheckIn
+                        ? 'bg-green-500/20 border-green-500/30 text-green-300'
+                        : 'bg-blue-500/20 border-blue-500/30 text-blue-300'
+                    }`}>
+                      <div className="flex items-center gap-2 justify-center">
+                        <FiClock size={18} />
+                        <p className="font-medium">{helpMessage}</p>
+                      </div>
+                      {timeStatus.minutesUntilStart !== null && timeStatus.isBeforeWindow && (
+                        <p className="text-center text-sm mt-2 opacity-80">
+                          Le pointage sera disponible {formatTimeRemaining(timeStatus.minutesUntilStart - 120)} avant le début
+                        </p>
+                      )}
+                    </div>
                   )}
-                  Entrée
-                </button>
-                <button
-                  onClick={() => submitCheckIn('out')}
-                  disabled={submitting || !todayAttendance?.checkedIn || todayAttendance?.checkedOut || !facialVerified}
-                  className={`py-5 md:py-6 rounded-2xl font-bold text-lg shadow-lg transition-all flex items-center justify-center gap-2 ${
-                    submitting && checkInType === 'out'
-                      ? 'bg-gray-500 text-white cursor-not-allowed'
-                      : !todayAttendance?.checkedIn || todayAttendance?.checkedOut
-                      ? 'bg-gray-400 text-white cursor-not-allowed'
-                      : !facialVerified
-                      ? 'bg-gray-400 text-white cursor-not-allowed'
-                      : 'bg-gradient-to-br from-orange-500 to-red-500 text-white shadow-orange-500/30 hover:shadow-xl'
-                  }`}
-                >
-                  {submitting && checkInType === 'out' ? (
-                    <FiLoader className="animate-spin" size={22} />
-                  ) : (
-                    <FiLogOut size={22} />
-                  )}
-                  Sortie
-                </button>
-              </div>
-            )}
+
+                  <div className="grid grid-cols-2 gap-4">
+                    <button
+                      onClick={() => submitCheckIn('in')}
+                      disabled={
+                        submitting || 
+                        (todayAttendance?.checkedIn && !todayAttendance?.checkedOut) || 
+                        !facialVerified ||
+                        !timeStatus.canCheckIn
+                      }
+                      className={`py-5 md:py-6 rounded-2xl font-bold text-lg shadow-lg transition-all flex flex-col items-center justify-center gap-2 ${
+                        submitting && checkInType === 'in'
+                          ? 'bg-gray-500 text-white cursor-not-allowed'
+                          : (todayAttendance?.checkedIn && !todayAttendance?.checkedOut) || !facialVerified || !timeStatus.canCheckIn
+                          ? 'bg-gray-400 text-white cursor-not-allowed opacity-50'
+                          : 'bg-gradient-to-br from-green-500 to-emerald-600 text-white shadow-green-500/30 hover:shadow-xl'
+                      }`}
+                      title={
+                        !timeStatus.canCheckIn 
+                          ? timeStatus.isBeforeWindow 
+                            ? `Disponible dans ${formatTimeRemaining(timeStatus.minutesUntilStart - 120)}`
+                            : 'Événement terminé'
+                          : !facialVerified 
+                          ? 'Vérification faciale requise'
+                          : ''
+                      }
+                    >
+                      {submitting && checkInType === 'in' ? (
+                        <FiLoader className="animate-spin" size={22} />
+                      ) : (
+                        <FiNavigation size={22} />
+                      )}
+                      <span>Entrée</span>
+                      {!timeStatus.canCheckIn && timeStatus.isBeforeWindow && (
+                        <span className="text-xs opacity-75">
+                          ({formatTimeRemaining(timeStatus.minutesUntilStart - 120)})
+                        </span>
+                      )}
+                    </button>
+                    <button
+                      onClick={() => submitCheckIn('out')}
+                      disabled={
+                        submitting || 
+                        !todayAttendance?.checkedIn || 
+                        todayAttendance?.checkedOut || 
+                        !facialVerified ||
+                        !timeStatus.canCheckOut
+                      }
+                      className={`py-5 md:py-6 rounded-2xl font-bold text-lg shadow-lg transition-all flex flex-col items-center justify-center gap-2 ${
+                        submitting && checkInType === 'out'
+                          ? 'bg-gray-500 text-white cursor-not-allowed'
+                          : !todayAttendance?.checkedIn || todayAttendance?.checkedOut || !facialVerified || !timeStatus.canCheckOut
+                          ? 'bg-gray-400 text-white cursor-not-allowed opacity-50'
+                          : 'bg-gradient-to-br from-orange-500 to-red-500 text-white shadow-orange-500/30 hover:shadow-xl'
+                      }`}
+                      title={
+                        !timeStatus.canCheckOut && timeStatus.isDuringEvent && !timeStatus.isNearEnd
+                          ? `Disponible dans ${formatTimeRemaining(timeStatus.minutesUntilEnd - 5)}`
+                          : !todayAttendance?.checkedIn
+                          ? 'Veuillez d\'abord pointer l\'entrée'
+                          : !facialVerified
+                          ? 'Vérification faciale requise'
+                          : ''
+                      }
+                    >
+                      {submitting && checkInType === 'out' ? (
+                        <FiLoader className="animate-spin" size={22} />
+                      ) : (
+                        <FiLogOut size={22} />
+                      )}
+                      <span>Sortie</span>
+                      {!timeStatus.canCheckOut && timeStatus.isDuringEvent && !timeStatus.isNearEnd && (
+                        <span className="text-xs opacity-75">
+                          ({formatTimeRemaining(timeStatus.minutesUntilEnd - 5)})
+                        </span>
+                      )}
+                    </button>
+                  </div>
+                </>
+              );
+            })()}
 
             {/* Status Messages */}
             {!isLocked && todayAttendance?.checkedIn && !todayAttendance?.checkedOut && (

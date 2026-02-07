@@ -11,6 +11,7 @@
 
 const { User, Event, GeoTracking } = require('../models');
 const { Op } = require('sequelize');
+const { isTrackingAllowed, getEventTimeStatus } = require('../utils/eventTimeWindows');
 
 class SocketIOService {
   constructor() {
@@ -157,6 +158,41 @@ class SocketIOService {
       const { latitude, longitude, accuracy, speed, heading, batteryLevel, isMoving } = data;
       const { userId, userIdentifier } = connection;
       
+      // 🔥 VÉRIFIER LA FENÊTRE TEMPORELLE DE L'ÉVÉNEMENT
+      if (connection.eventId) {
+        const event = await Event.findByPk(connection.eventId);
+        
+        if (!event) {
+          socket.emit('tracking:error', { 
+            message: 'Événement introuvable',
+            code: 'EVENT_NOT_FOUND'
+          });
+          return;
+        }
+        
+        // Vérifier si le tracking est autorisé pour cet événement
+        if (!isTrackingAllowed(event)) {
+          const timeStatus = getEventTimeStatus(event);
+          
+          let reason = 'Tracking non autorisé';
+          if (timeStatus.isBeforeWindow) {
+            reason = 'Le tracking démarrera 2h avant le début de l\'événement';
+          } else if (timeStatus.isAfterEvent) {
+            reason = 'Événement terminé - Tracking désactivé';
+          }
+          
+          socket.emit('tracking:disabled', { 
+            message: reason,
+            timeStatus,
+            eventId: event.id,
+            eventName: event.name
+          });
+          
+          console.log(`⏸️ Tracking refusé pour ${userId}: ${reason}`);
+          return;
+        }
+      }
+      
       // Déterminer si l'agent est en mouvement
       const lastMove = this.lastMovement.get(userId);
       const now = Date.now();
@@ -227,6 +263,14 @@ class SocketIOService {
       socket.emit('tracking:position_ack', {
         timestamp: Date.now(),
         received: true
+      });
+      
+      console.log(`📍 Position mise à jour: ${user?.firstName} ${user?.lastName} (${latitude.toFixed(6)}, ${longitude.toFixed(6)})`);
+    } catch (error) {
+      console.error('❌ Erreur mise à jour position:', error);
+      socket.emit('tracking:error', { message: error.message });
+    }
+  }
       });
       
       console.log(`📍 Position mise à jour: ${user?.firstName} ${user?.lastName} (${latitude.toFixed(6)}, ${longitude.toFixed(6)})`);
