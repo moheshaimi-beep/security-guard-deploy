@@ -1309,7 +1309,6 @@ const RealTimeTracking = () => {
                   </Marker>
                 </React.Fragment>
               );
-              });
             })()}
           </MapContainer>
 

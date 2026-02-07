@@ -271,14 +271,6 @@ class SocketIOService {
       socket.emit('tracking:error', { message: error.message });
     }
   }
-      });
-      
-      console.log(`📍 Position mise à jour: ${user?.firstName} ${user?.lastName} (${latitude.toFixed(6)}, ${longitude.toFixed(6)})`);
-    } catch (error) {
-      console.error('❌ Erreur mise à jour position:', error);
-      socket.emit('tracking:error', { message: error.message });
-    }
-  }
 
   /**
    * Envoyer les positions actuelles
