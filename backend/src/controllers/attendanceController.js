@@ -353,6 +353,38 @@ exports.checkIn = async (req, res) => {
           createdAt: now
         });
         console.log('📍 Position GPS enregistrée dans GeoTracking pour le suivi en temps réel');
+
+        // ✅ NOUVEAU: Émettre la position via Socket.IO pour affichage immédiat sur la carte temps réel
+        const io = req.app.get('io');
+        if (io) {
+          const user = await User.findByPk(agentId, {
+            attributes: ['id', 'firstName', 'lastName', 'employeeId', 'role', 'phone', 'cin']
+          });
+
+          const positionData = {
+            userId: user.id,
+            latitude: parseFloat(latitude),
+            longitude: parseFloat(longitude),
+            accuracy: deviceInfo?.accuracy ? parseFloat(deviceInfo.accuracy) : null,
+            batteryLevel: deviceInfo?.batteryLevel ? parseInt(deviceInfo.batteryLevel) : 100,
+            timestamp: now.getTime(),
+            isMoving: false, // Au moment du check-in, agent est arrêté
+            isConnected: true,
+            user: {
+              id: user.id,
+              cin: user.cin,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              employeeId: user.employeeId,
+              role: user.role,
+              phone: user.phone
+            }
+          };
+
+          // Émettre à tous les superviseurs/admins qui suivent cet événement
+          io.to(`event:${eventId}`).emit('tracking:position_update', positionData);
+          console.log(`📡 Position GPS émise via Socket.IO pour ${user.firstName} ${user.lastName} sur événement ${eventId}`);
+        }
       } catch (geoError) {
         console.error('⚠️ Erreur lors de l\'enregistrement de la position GPS:', geoError.message);
         console.error('Stack:', geoError.stack);
@@ -542,6 +574,55 @@ exports.checkOut = async (req, res) => {
       const geoCheck = geoService.checkGeofence(latitude, longitude, attendance.event);
       attendance.checkOutLatitude = latitude;
       attendance.checkOutLongitude = longitude;
+
+      // ✅ NOUVEAU: Enregistrer position check-out dans GeoTracking et émettre via Socket.IO
+      try {
+        await GeoTracking.create({
+          userId: agentId,
+          eventId: attendance.eventId,
+          latitude: parseFloat(latitude),
+          longitude: parseFloat(longitude),
+          accuracy: req.body.accuracy ? parseFloat(req.body.accuracy) : null,
+          batteryLevel: req.body.batteryLevel ? parseInt(req.body.batteryLevel) : null,
+          isWithinGeofence: geoCheck?.isWithinGeofence || true,
+          distanceFromEvent: geoCheck?.distance ? parseFloat(geoCheck.distance) : null,
+          recordedAt: now,
+          createdAt: now
+        });
+
+        // Émettre la position via Socket.IO
+        const io = req.app.get('io');
+        if (io) {
+          const user = await User.findByPk(agentId, {
+            attributes: ['id', 'firstName', 'lastName', 'employeeId', 'role', 'phone', 'cin']
+          });
+
+          const positionData = {
+            userId: user.id,
+            latitude: parseFloat(latitude),
+            longitude: parseFloat(longitude),
+            accuracy: req.body.accuracy ? parseFloat(req.body.accuracy) : null,
+            batteryLevel: req.body.batteryLevel ? parseInt(req.body.batteryLevel) : 100,
+            timestamp: now.getTime(),
+            isMoving: false, // Au moment du check-out, agent est arrêté
+            isConnected: true,
+            user: {
+              id: user.id,
+              cin: user.cin,
+              firstName: user.firstName,
+              lastName: user.lastName,
+              employeeId: user.employeeId,
+              role: user.role,
+              phone: user.phone
+            }
+          };
+
+          io.to(`event:${attendance.eventId}`).emit('tracking:position_update', positionData);
+          console.log(`📡 Position CHECK-OUT émise via Socket.IO pour ${user.firstName} ${user.lastName}`);
+        }
+      } catch (geoError) {
+        console.error('⚠️ Erreur enregistrement position check-out:', geoError.message);
+      }
     }
 
     await attendance.save();
